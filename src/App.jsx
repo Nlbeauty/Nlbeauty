@@ -274,99 +274,143 @@ function AuthModal({onAuth,onClose,booking}) {
   );
 }
 
-// ── PLANITY DATE PICKER ──────────────────────────────────────────────────────
-function PlanityDatePicker({selPresta,allRdvs,allSupaBlocked,selectedDate,selectedSlot,onSelect,r4}) {
+// ── DATE PICKER Option 1 : Calendrier + créneaux dessous ────────────────────
+function PlanityDatePicker({selPresta,allRdvs,allSupaBlocked,selectedDate,selectedSlot,onSelect}) {
   const ALL_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const SEMAINE = ["17:00","17:30","18:00","18:30","19:00"];
   const WEEKEND = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const [openDate, setOpenDate] = useState(null);
+  const DAYS_S = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+  const MONTHS_F = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+  const DAYS_L = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
 
-  // Générer les 30 prochains jours à partir de demain (réservation 24h min)
-  const days = (() => {
-    const result = [];
-    const now = new Date();
-    // Minimum 24h à l'avance
-    const minDate = new Date(now.getTime() + 24*60*60*1000);
-    for(let i=0; i<30; i++){
-      const d = new Date(minDate);
-      d.setDate(minDate.getDate()+i);
-      const s = d.toISOString().split("T")[0];
-      const dow = d.getDay();
-      const isWE = dow===0||dow===6;
-      const allowed = isWE ? WEEKEND : SEMAINE;
-      const dur = selPresta?.duree||30;
-      const slotsNeeded = Math.ceil(dur/30);
-      const rdvsDay = allRdvs.filter(r=>r.date===s&&r.statut!=="annulé");
-      const supaDay = allSupaBlocked[s]||[];
-      // Trouver les créneaux dispo
-      const availSlots = [];
-      for(let j=0; j<=allowed.length-slotsNeeded; j++){
-        let ok=true;
-        for(let k=0;k<slotsNeeded;k++){
-          const sl=allowed[j+k];
-          if(!sl){ok=false;break;}
-          if(supaDay.includes(sl)){ok=false;break;}
-          const idx=ALL_SLOTS.indexOf(sl);
-          for(const r of rdvsDay){
-            const rIdx=ALL_SLOTS.indexOf(r.slot);
-            const rEnd=rIdx+Math.ceil((r.duree||30)/30);
-            if(idx>=rIdx&&idx<rEnd){ok=false;break;}
-          }
-          if(!ok)break;
+  const today = new Date();
+  const minDate = new Date(today.getTime() + 24*60*60*1000);
+  const minDateStr = minDate.toISOString().split("T")[0];
+
+  const [yr, setYr] = useState(today.getFullYear());
+  const [mo, setMo] = useState(today.getMonth());
+
+  // Calculer les créneaux dispo pour un jour donné
+  const getAvailSlots = (dateStr) => {
+    const dow = parseD(dateStr).getDay();
+    const isWE = dow===0||dow===6;
+    const allowed = isWE ? WEEKEND : SEMAINE;
+    const dur = selPresta?.duree||30;
+    const slotsNeeded = Math.ceil(dur/30);
+    const rdvsDay = allRdvs.filter(r=>r.date===dateStr&&r.statut!=="annulé");
+    const supaDay = allSupaBlocked[dateStr]||[];
+    const avail = [];
+    for(let j=0; j<=allowed.length-slotsNeeded; j++){
+      let ok=true;
+      for(let k=0;k<slotsNeeded;k++){
+        const sl=allowed[j+k];
+        if(!sl){ok=false;break;}
+        if(supaDay.includes(sl)){ok=false;break;}
+        const idx=ALL_SLOTS.indexOf(sl);
+        for(const r of rdvsDay){
+          const rIdx=ALL_SLOTS.indexOf(r.slot);
+          const rEnd=rIdx+Math.ceil((r.duree||30)/30);
+          if(idx>=rIdx&&idx<rEnd){ok=false;break;}
         }
-        if(ok) availSlots.push(allowed[j]);
+        if(!ok)break;
       }
-      if(availSlots.length>0) result.push({date:s, slots:availSlots});
+      if(ok) avail.push(allowed[j]);
     }
-    return result;
-  })();
+    return avail;
+  };
 
-  // Auto-ouvrir le premier jour dispo
+  // Auto-sélectionner le premier jour dispo au chargement
   useEffect(()=>{
-    if(days.length>0&&!openDate) setOpenDate(days[0].date);
+    if(selectedDate) return;
+    const d = new Date(minDate);
+    for(let i=0;i<60;i++){
+      const s = new Date(d.getTime()+i*86400000).toISOString().split("T")[0];
+      if(getAvailSlots(s).length>0){
+        const [y,m] = s.split("-");
+        setYr(+y); setMo(+m-1);
+        onSelect(s, null);
+        break;
+      }
+    }
   },[selPresta]);
 
-  // Auto-ouvrir le jour sélectionné
-  useEffect(()=>{
-    if(selectedDate) setOpenDate(selectedDate);
-  },[selectedDate]);
-
-  if(days.length===0) return (
-    <div style={{padding:"20px",textAlign:"center",color:C.textLight,fontSize:14,background:C.surface,borderRadius:14,border:`1px solid ${C.border}`}}>
-      Aucun créneau disponible dans les 30 prochains jours.
-    </div>
-  );
+  const firstDayOfMonth = (new Date(yr,mo,1).getDay()||7)-1;
+  const daysInMonth = new Date(yr,mo+1,0).getDate();
+  const selectedSlots = selectedDate ? getAvailSlots(selectedDate) : [];
 
   return (
-    <div style={{display:"flex",flexDirection:"column",gap:2}}>
-      {days.map(({date:d, slots})=>{
-        const isOpen = openDate===d;
-        const isSelected = selectedDate===d;
-        return (
-          <div key={d} style={{background:C.surface,borderRadius:14,overflow:"hidden",border:`1px solid ${isSelected?C.accent:C.border}`,transition:"border-color .2s"}}>
-            {/* Header jour */}
-            <div onClick={()=>setOpenDate(isOpen?null:d)} style={{padding:"16px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",background:isSelected?C.accentLight:"transparent"}}>
-              <span style={{fontSize:15,fontWeight:isSelected?600:400,color:isSelected?C.accentDark:C.text}}>{fmtLong(d)}</span>
-              <span style={{color:C.textLight,fontSize:16,transition:"transform .2s",display:"inline-block",transform:isOpen?"rotate(180deg)":"none"}}>⌄</span>
-            </div>
-            {/* Créneaux */}
-            {isOpen&&(
-              <div style={{padding:"0 18px 16px"}}>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
-                  {slots.map(s=>{
-                    const active=selectedDate===d&&selectedSlot===s;
-                    return (
-                      <div key={s} onClick={()=>onSelect(d,s)} style={{padding:"12px 4px",textAlign:"center",borderRadius:10,border:`1.5px solid ${active?C.accent:C.border}`,background:active?C.accent:C.surface,color:active?"#fff":C.textMid,fontSize:14,fontWeight:active?700:400,cursor:"pointer",transition:"all .15s"}}>
-                        {s}
-                      </div>
-                    );
-                  })}
-                </div>
+    <div>
+      {/* Calendrier */}
+      <div style={{background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"20px 18px",marginBottom:16}}>
+        {/* Nav mois */}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+          <button onClick={()=>mo===0?(setMo(11),setYr(yr-1)):setMo(mo-1)} style={{background:"none",border:"none",color:C.textLight,fontSize:22,cursor:"pointer",padding:"0 8px"}}>‹</button>
+          <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:17,color:C.text,letterSpacing:.5}}>{MONTHS_F[mo]} {yr}</span>
+          <button onClick={()=>mo===11?(setMo(0),setYr(yr+1)):setMo(mo+1)} style={{background:"none",border:"none",color:C.textLight,fontSize:22,cursor:"pointer",padding:"0 8px"}}>›</button>
+        </div>
+        {/* Jours semaine */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:8}}>
+          {DAYS_S.map(d=><div key={d} style={{textAlign:"center",fontSize:10,color:C.textLight,fontWeight:500,letterSpacing:.8,textTransform:"uppercase",paddingBottom:8}}>{d}</div>)}
+        </div>
+        {/* Cases */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"4px 0"}}>
+          {Array(firstDayOfMonth).fill(null).map((_,i)=><div key={`e${i}`}/>)}
+          {Array(daysInMonth).fill(null).map((_,i)=>{
+            const d=i+1;
+            const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+            const isPast=ds<minDateStr;
+            const avail=!isPast?getAvailSlots(ds):[];
+            const hasDispo=avail.length>0;
+            const isSel=ds===selectedDate;
+            return (
+              <div key={d} onClick={()=>hasDispo&&!isPast&&onSelect(ds,null)} style={{
+                textAlign:"center", padding:"8px 2px", borderRadius:8, position:"relative",
+                cursor:hasDispo&&!isPast?"pointer":"default",
+                background:isSel?C.accent:"transparent",
+                color:isSel?"#fff":isPast||!hasDispo?"#3a3040":C.text,
+                fontWeight:isSel?700:400, fontSize:13, transition:"all .15s",
+              }}>
+                {d}
+                {/* Point si dispo */}
+                {hasDispo&&!isSel&&(
+                  <div style={{width:4,height:4,borderRadius:"50%",background:C.accent,position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)"}}/>
+                )}
               </div>
-            )}
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Créneaux du jour sélectionné */}
+      {selectedDate&&selectedSlots.length>0&&(
+        <div className="fu">
+          <div style={{fontSize:12,color:C.textMid,marginBottom:12}}>
+            {DAYS_L[parseD(selectedDate).getDay()]} {parseD(selectedDate).getDate()} {MONTHS_F[parseD(selectedDate).getMonth()]}
           </div>
-        );
-      })}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+            {selectedSlots.map(s=>{
+              const active=selectedSlot===s;
+              return (
+                <div key={s} onClick={()=>onSelect(selectedDate,s)} style={{
+                  padding:"12px 4px",textAlign:"center",borderRadius:10,
+                  border:`1.5px solid ${active?C.accent:C.border}`,
+                  background:active?C.accent:C.surface,
+                  color:active?"#fff":C.textMid,
+                  fontSize:13,fontWeight:active?700:400,
+                  cursor:"pointer",transition:"all .15s",
+                }}>
+                  {s}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {selectedDate&&selectedSlots.length===0&&(
+        <div style={{textAlign:"center",padding:"16px",fontSize:13,color:C.textLight}}>
+          Aucun créneau disponible ce jour.
+        </div>
+      )}
     </div>
   );
 }
@@ -612,8 +656,11 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
             allSupaBlocked={allSupaBlocked}
             selectedDate={date}
             selectedSlot={slot}
-            onSelect={(d,s)=>{setDate(d);setSlot(s);sc(r5);}}
-            r4={r4}
+            onSelect={(d,s)=>{
+              setDate(d);
+              setSlot(s||"");
+              if(s) sc(r5);
+            }}
           />
         </div>
       )}
