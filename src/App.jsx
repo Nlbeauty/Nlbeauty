@@ -836,6 +836,7 @@ function AdminView({onExit}) {
   const [rdvs,setRdvs]=useState([]),[profs,setProfs]=useState([]);
   const [loading,setLoading]=useState(false),[tab,setTab]=useState("today");
   const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
+  const [showLoginModal,setShowLoginModal]=useState(false);
 
   const load=async()=>{
     setLoading(true);
@@ -1021,6 +1022,7 @@ export default function App() {
   const [loadingRdvs,setLoadingRdvs]=useState(false);
   const [toast,setToast]=useState(null);
   const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
+  const [showLoginModal,setShowLoginModal]=useState(false);
 
   const showToast=(msg,type="ok")=>{setToast({msg,type});setTimeout(()=>setToast(null),3500);};
 
@@ -1051,6 +1053,7 @@ export default function App() {
     <div style={{minHeight:"100vh",background:C.bg}}>
       <GS/>
       {toast&&<Toast {...toast}/>}
+      {showLoginModal&&<AuthModal onAuth={(s)=>{handleAuth(s);setShowLoginModal(false);}} onClose={()=>setShowLoginModal(false)} booking={null}/>}
       <div style={{maxWidth:520,margin:"0 auto",padding:"0 20px 100px"}}>
         <div style={{paddingTop:48,paddingBottom:36}}>
           <div style={{fontSize:9,letterSpacing:3,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>Institut de beauté · Toulouse</div>
@@ -1062,7 +1065,7 @@ export default function App() {
                 <button onClick={handleLogout} style={{fontSize:11,color:C.textLight,background:"none",border:"none",cursor:"pointer",marginTop:2}}>Déconnexion</button>
               </div>
             ):(
-              <button onClick={()=>setTab("reserver")} style={{fontSize:12,color:C.textMid,background:"none",border:`1px solid ${C.border}`,borderRadius:20,padding:"6px 14px",cursor:"pointer"}}>Se connecter</button>
+              <button onClick={()=>setShowLoginModal(true)} style={{fontSize:12,color:C.textMid,background:"none",border:`1px solid ${C.border}`,borderRadius:20,padding:"6px 14px",cursor:"pointer"}}>Se connecter</button>
             )}
           </div>
           <p style={{fontSize:12,color:C.textLight,marginTop:10,lineHeight:1.7,letterSpacing:1,fontStyle:"italic"}}>Ton espace beauté à domicile · Ongles · Laser · Bronzage</p>
