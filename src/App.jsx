@@ -156,10 +156,16 @@ const PBtn = ({children,onClick,disabled,style={}}) => <button onClick={onClick}
 const GBtn = ({children,onClick,style={}}) => <button onClick={onClick} style={{width:"100%",padding:"13px",borderRadius:12,border:`1.5px solid ${C.border}`,background:"transparent",color:C.textMid,fontSize:14,cursor:"pointer",...style}}>{children}</button>;
 const Toast = ({msg,type="ok"}) => <div className="fi" style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:type==="err"?"#fff0f0":"#f0faf4",border:`1px solid ${type==="err"?"#f0c8c8":"#a8d8b8"}`,color:type==="err"?"#c05050":"#3a8050",padding:"12px 24px",borderRadius:12,fontSize:13,fontWeight:500,zIndex:9999,whiteSpace:"nowrap",boxShadow:"0 4px 20px rgba(0,0,0,.08)"}}>{msg}</div>;
 
-function Calendar({selected,onSelect,bookedDates=[]}) {
+function Calendar({selected,onSelect,bookedDates=[],unavailableDates=[],firstAvailable=null}) {
   const t=new Date();
-  const [yr,setYr]=useState(t.getFullYear());
-  const [mo,setMo]=useState(t.getMonth());
+  const [yr,setYr]=useState(()=>{
+    if(firstAvailable){const [y]=firstAvailable.split("-");return +y;}
+    return t.getFullYear();
+  });
+  const [mo,setMo]=useState(()=>{
+    if(firstAvailable){const [,m]=firstAvailable.split("-");return +m-1;}
+    return t.getMonth();
+  });
   const todayS=todayStr();
   return (
     <div>
@@ -176,11 +182,23 @@ function Calendar({selected,onSelect,bookedDates=[]}) {
         {Array(daysIn(yr,mo)).fill(null).map((_,i)=>{
           const d=i+1;
           const s=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-          const isPast=s<todayS,isSel=s===selected,isToday=s===todayS;
+          const isPast=s<todayS;
+          const isUnavail=unavailableDates.includes(s);
+          const isSel=s===selected;
+          const isFirst=s===firstAvailable&&!isSel;
+          const isDisabled=isPast||isUnavail;
           return (
-            <div key={d} onClick={()=>!isPast&&onSelect(s)} style={{textAlign:"center",padding:"9px 2px",borderRadius:8,position:"relative",cursor:isPast?"default":"pointer",background:isSel?C.accent:"transparent",color:isSel?"#fff":isPast?C.borderLight:isToday?C.accentDark:C.text,fontWeight:isSel?600:isToday?500:400,fontSize:13,transition:"all .15s"}}>
+            <div key={d} onClick={()=>!isDisabled&&onSelect(s)} style={{
+              textAlign:"center",padding:"9px 2px",borderRadius:8,position:"relative",
+              cursor:isDisabled?"default":"pointer",
+              background:isSel?C.accent:isFirst?"#3a2848":"transparent",
+              color:isSel?"#fff":isDisabled?C.borderLight:isFirst?C.accent:C.text,
+              fontWeight:isSel?600:isFirst?600:400,
+              fontSize:13,transition:"all .15s",
+              opacity:isUnavail?.35:1,
+            }}>
               {d}
-              {bookedDates.includes(s)&&!isSel&&<div style={{width:3,height:3,borderRadius:"50%",background:C.accent,position:"absolute",bottom:3,left:"50%",transform:"translateX(-50%)"}}/>}
+              {isFirst&&!isSel&&<div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",fontSize:6,color:C.accent}}>●</div>}
             </div>
           );
         })}
@@ -256,6 +274,103 @@ function AuthModal({onAuth,onClose,booking}) {
   );
 }
 
+// ── PLANITY DATE PICKER ──────────────────────────────────────────────────────
+function PlanityDatePicker({selPresta,allRdvs,allSupaBlocked,selectedDate,selectedSlot,onSelect,r4}) {
+  const ALL_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const SEMAINE = ["17:00","17:30","18:00","18:30","19:00"];
+  const WEEKEND = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const [openDate, setOpenDate] = useState(null);
+
+  // Générer les 30 prochains jours à partir de demain (réservation 24h min)
+  const days = (() => {
+    const result = [];
+    const now = new Date();
+    // Minimum 24h à l'avance
+    const minDate = new Date(now.getTime() + 24*60*60*1000);
+    for(let i=0; i<30; i++){
+      const d = new Date(minDate);
+      d.setDate(minDate.getDate()+i);
+      const s = d.toISOString().split("T")[0];
+      const dow = d.getDay();
+      const isWE = dow===0||dow===6;
+      const allowed = isWE ? WEEKEND : SEMAINE;
+      const dur = selPresta?.duree||30;
+      const slotsNeeded = Math.ceil(dur/30);
+      const rdvsDay = allRdvs.filter(r=>r.date===s&&r.statut!=="annulé");
+      const supaDay = allSupaBlocked[s]||[];
+      // Trouver les créneaux dispo
+      const availSlots = [];
+      for(let j=0; j<=allowed.length-slotsNeeded; j++){
+        let ok=true;
+        for(let k=0;k<slotsNeeded;k++){
+          const sl=allowed[j+k];
+          if(!sl){ok=false;break;}
+          if(supaDay.includes(sl)){ok=false;break;}
+          const idx=ALL_SLOTS.indexOf(sl);
+          for(const r of rdvsDay){
+            const rIdx=ALL_SLOTS.indexOf(r.slot);
+            const rEnd=rIdx+Math.ceil((r.duree||30)/30);
+            if(idx>=rIdx&&idx<rEnd){ok=false;break;}
+          }
+          if(!ok)break;
+        }
+        if(ok) availSlots.push(allowed[j]);
+      }
+      if(availSlots.length>0) result.push({date:s, slots:availSlots});
+    }
+    return result;
+  })();
+
+  // Auto-ouvrir le premier jour dispo
+  useEffect(()=>{
+    if(days.length>0&&!openDate) setOpenDate(days[0].date);
+  },[selPresta]);
+
+  // Auto-ouvrir le jour sélectionné
+  useEffect(()=>{
+    if(selectedDate) setOpenDate(selectedDate);
+  },[selectedDate]);
+
+  if(days.length===0) return (
+    <div style={{padding:"20px",textAlign:"center",color:C.textLight,fontSize:14,background:C.surface,borderRadius:14,border:`1px solid ${C.border}`}}>
+      Aucun créneau disponible dans les 30 prochains jours.
+    </div>
+  );
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:2}}>
+      {days.map(({date:d, slots})=>{
+        const isOpen = openDate===d;
+        const isSelected = selectedDate===d;
+        return (
+          <div key={d} style={{background:C.surface,borderRadius:14,overflow:"hidden",border:`1px solid ${isSelected?C.accent:C.border}`,transition:"border-color .2s"}}>
+            {/* Header jour */}
+            <div onClick={()=>setOpenDate(isOpen?null:d)} style={{padding:"16px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",background:isSelected?C.accentLight:"transparent"}}>
+              <span style={{fontSize:15,fontWeight:isSelected?600:400,color:isSelected?C.accentDark:C.text}}>{fmtLong(d)}</span>
+              <span style={{color:C.textLight,fontSize:16,transition:"transform .2s",display:"inline-block",transform:isOpen?"rotate(180deg)":"none"}}>⌄</span>
+            </div>
+            {/* Créneaux */}
+            {isOpen&&(
+              <div style={{padding:"0 18px 16px"}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+                  {slots.map(s=>{
+                    const active=selectedDate===d&&selectedSlot===s;
+                    return (
+                      <div key={s} onClick={()=>onSelect(d,s)} style={{padding:"12px 4px",textAlign:"center",borderRadius:10,border:`1.5px solid ${active?C.accent:C.border}`,background:active?C.accent:C.surface,color:active?"#fff":C.textMid,fontSize:14,fontWeight:active?700:400,cursor:"pointer",transition:"all .15s"}}>
+                        {s}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── RÉSERVATION ───────────────────────────────────────────────────────────────
 function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
   const [svcId,setSvcId]=useState(null);
@@ -271,12 +386,79 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
   const SEMAINE_RES = ["17:00","17:30","18:00","18:30","19:00"];
   const WEEKEND_RES = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const [supaBlocked, setSupaBlocked] = useState([]);
+  const [allSupaBlocked, setAllSupaBlocked] = useState({}); // {date: [slots]}
+
+  // Charger tous les blocages Supabase une fois la prestation choisie
+  useEffect(()=>{
+    if(!selPresta) return;
+    api.get("blocked_slots","select=date,slot").then(d=>{
+      if(!Array.isArray(d)) return;
+      const map={};
+      d.forEach(r=>{ if(!map[r.date])map[r.date]=[]; map[r.date].push(r.slot); });
+      setAllSupaBlocked(map);
+    });
+  },[selPresta]);
+
   useEffect(()=>{
     if(!date) return;
     api.get("blocked_slots",`date=eq.${date}&select=slot`).then(d=>{
       if(Array.isArray(d)) setSupaBlocked(d.map(r=>r.slot));
     });
   },[date]);
+
+  // Calculer si un jour est dispo pour la durée de la prestation
+  const isDayAvailable = (dateStr) => {
+    if(!selPresta) return true;
+    const dow = parseD(dateStr).getDay();
+    const isWE = dow===0||dow===6;
+    const allowed = isWE ? WEEKEND_RES : SEMAINE_RES;
+    const dur = selPresta.duree||30;
+    const slotsNeeded = Math.ceil(dur/30);
+    const rdvsDay = allRdvs.filter(r=>r.date===dateStr&&r.statut!=="annulé");
+    const supaDay = allSupaBlocked[dateStr]||[];
+    // Pour chaque slot autorisé, vérifier si on peut caser la durée
+    for(let i=0;i<=allowed.length-slotsNeeded;i++){
+      let ok=true;
+      for(let j=0;j<slotsNeeded;j++){
+        const s=allowed[i+j];
+        if(supaDay.includes(s)){ok=false;break;}
+        // Vérifier si ce slot est pris par un RDV existant
+        const idx=ALL_SLOTS_RES.indexOf(s);
+        for(const r of rdvsDay){
+          const rIdx=ALL_SLOTS_RES.indexOf(r.slot);
+          const rEnd=rIdx+Math.ceil((r.duree||30)/30);
+          if(idx>=rIdx&&idx<rEnd){ok=false;break;}
+        }
+        if(!ok)break;
+      }
+      if(ok) return true;
+    }
+    return false;
+  };
+
+  // Calculer les jours indisponibles et le premier dispo sur 60 jours
+  const {unavailableDates, firstAvailable} = (() => {
+    if(!selPresta) return {unavailableDates:[], firstAvailable:null};
+    const unavail=[];
+    let first=null;
+    const today=new Date();
+    for(let i=0;i<60;i++){
+      const d=new Date(today);
+      d.setDate(today.getDate()+i);
+      const s=d.toISOString().split("T")[0];
+      if(isDayAvailable(s)){
+        if(!first) first=s;
+      } else {
+        unavail.push(s);
+      }
+    }
+    return {unavailableDates:unavail, firstAvailable:first};
+  })();
+
+  // Auto-sélectionner le premier jour dispo quand on choisit une prestation
+  useEffect(()=>{
+    if(firstAvailable&&!date) setDate(firstAvailable);
+  },[firstAvailable]);
   const takenSlots = (() => {
     const blocked = new Set();
     if(date) {
@@ -420,30 +602,19 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
         </div>
       )}
 
-      {/* ── DATE ── */}
+      {/* ── DATE & HORAIRES style Planity ── */}
       {selPresta&&(
         <div ref={r3} className="fu" style={{marginTop:36}}>
-          <Lbl>Date du rendez-vous</Lbl>
-          <div style={{background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"20px 18px",boxShadow:"0 2px 10px rgba(0,0,0,.03)"}}>
-            <Calendar selected={date} onSelect={d=>{setDate(d);setSlot("");sc(r4);}} bookedDates={allRdvs.filter(r=>r.statut!=="annulé").map(r=>r.date)}/>
-          </div>
-        </div>
-      )}
-
-      {/* ── HORAIRES ── */}
-      {date&&(
-        <div ref={r4} className="fu" style={{marginTop:36}}>
-          <Lbl>Horaire — {fmtLong(date)}</Lbl>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-            {SLOTS.map(s=>{
-              const taken=takenSlots.has?takenSlots.has(s):takenSlots.includes(s),active=slot===s;
-              return (
-                <div key={s} onClick={()=>!taken&&(setSlot(s),sc(r5))} style={{padding:"11px 4px",textAlign:"center",borderRadius:10,border:`1.5px solid ${active?C.accent:taken?C.borderLight:C.border}`,background:active?C.accent:taken?C.surfaceAlt:C.surface,color:active?"#fff":taken?C.borderLight:C.textMid,fontSize:13,fontWeight:active?700:400,cursor:taken?"default":"pointer",transition:"all .15s",textDecoration:taken?"line-through":"none"}}>
-                  {s}
-                </div>
-              );
-            })}
-          </div>
+          <Lbl>Date &amp; horaire</Lbl>
+          <PlanityDatePicker
+            selPresta={selPresta}
+            allRdvs={allRdvs}
+            allSupaBlocked={allSupaBlocked}
+            selectedDate={date}
+            selectedSlot={slot}
+            onSelect={(d,s)=>{setDate(d);setSlot(s);sc(r5);}}
+            r4={r4}
+          />
         </div>
       )}
 
@@ -483,6 +654,16 @@ function MesRdvsView({rdvs,loading}) {
   const up=rdvs.filter(r=>r.date>=todayStr()&&r.statut!=="annulé").sort((a,b)=>a.date.localeCompare(b.date));
   const past=rdvs.filter(r=>r.date<todayStr()||r.statut==="annulé").sort((a,b)=>b.date.localeCompare(a.date));
   const svcColor=(catId)=>SERVICES.find(s=>s.id===catId)?.color||C.accent;
+  const canCancel=(r)=>{
+    const rdvDate=new Date(`${r.date}T${r.slot}:00`);
+    const now=new Date();
+    return rdvDate.getTime()-now.getTime()>24*60*60*1000;
+  };
+  const handleCancel=async(r)=>{
+    if(!confirm("Annuler ce rendez-vous ?")) return;
+    await api.patch("rdvs",`id=eq.${r.id}`,{statut:"annulé"});
+    window.location.reload();
+  };
   const Card=({r})=>(
     <div style={{padding:"16px 0",borderBottom:`1px solid ${C.borderLight}`,display:"flex",gap:14,alignItems:"flex-start",opacity:r.statut==="annulé"?.4:1}}>
       <div style={{width:3,alignSelf:"stretch",borderRadius:2,background:svcColor(r.cat_id),flexShrink:0}}/>
@@ -495,9 +676,13 @@ function MesRdvsView({rdvs,loading}) {
           </div>
           <div style={{textAlign:"right",flexShrink:0}}>
             <div style={{fontSize:14,fontWeight:700,color:C.textMid}}>{r.prix} €</div>
-
           </div>
         </div>
+        {r.statut!=="annulé"&&r.date>=todayStr()&&(
+          canCancel(r)
+            ?<button onClick={()=>handleCancel(r)} style={{marginTop:10,fontSize:12,color:"#c05050",background:"none",border:"1px solid #3a1a1a",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Annuler</button>
+            :<div style={{marginTop:8,fontSize:11,color:C.textLight,fontStyle:"italic"}}>Annulation impossible — moins de 24h</div>
+        )}
       </div>
     </div>
   );
