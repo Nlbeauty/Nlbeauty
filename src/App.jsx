@@ -267,7 +267,26 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
   const [done,setDone]=useState(null);
 
   const svc=svcId?SERVICES.find(s=>s.id===svcId):null;
-  const takenSlots=allRdvs.filter(r=>r.date===date&&r.statut!=="annulé").map(r=>r.slot);
+  // Créneaux bloqués : on bloque le slot du RDV + tous les slots couverts par la durée
+  const blockedSlots = (() => {
+    const ALL_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30"];
+    const blocked = new Set();
+    // Ajouter aussi les créneaux manuellement bloqués
+    const manualBlocked = JSON.parse(localStorage.getItem("blocked_slots")||"{}");
+    (manualBlocked[date]||[]).forEach(s=>blocked.add(s));
+    allRdvs.filter(r=>r.date===date&&r.statut!=="annulé").forEach(r=>{
+      const startIdx = ALL_SLOTS.indexOf(r.slot);
+      if(startIdx===-1) return;
+      const dur = r.duree||30;
+      let mins = 0;
+      for(let i=startIdx; i<ALL_SLOTS.length && mins<dur; i++){
+        blocked.add(ALL_SLOTS[i]);
+        mins+=30;
+      }
+    });
+    return blocked;
+  })();
+  const takenSlots = blockedSlots;
 
   const r2=useRef(null),r3=useRef(null),r4=useRef(null),r5=useRef(null),doneRef=useRef(null);
   const sc=(ref,d=100)=>setTimeout(()=>ref.current?.scrollIntoView({behavior:"smooth",block:"start"}),d);
@@ -410,7 +429,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
           <Lbl>Horaire — {fmtLong(date)}</Lbl>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
             {SLOTS.map(s=>{
-              const taken=takenSlots.includes(s),active=slot===s;
+              const taken=takenSlots.has?takenSlots.has(s):takenSlots.includes(s),active=slot===s;
               return (
                 <div key={s} onClick={()=>!taken&&(setSlot(s),sc(r5))} style={{padding:"11px 4px",textAlign:"center",borderRadius:10,border:`1.5px solid ${active?C.accent:taken?C.borderLight:C.border}`,background:active?C.accent:taken?C.surfaceAlt:C.surface,color:active?"#fff":taken?C.borderLight:C.textMid,fontSize:13,fontWeight:active?700:400,cursor:taken?"default":"pointer",transition:"all .15s",textDecoration:taken?"line-through":"none"}}>
                   {s}
@@ -486,6 +505,97 @@ function MesRdvsView({rdvs,loading}) {
 }
 
 // ── ADMIN ─────────────────────────────────────────────────────────────────────
+function PlanningAdmin() {
+  const ALL_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30"];
+  const [selDate, setSelDate] = useState(todayStr());
+  const [blockedSlots, setBlockedSlots] = useState(()=>{try{return JSON.parse(localStorage.getItem("blocked_slots")||"{}");}catch{return {};}});
+  const [customSlots, setCustomSlots] = useState(()=>{try{return JSON.parse(localStorage.getItem("custom_slots")||JSON.stringify(ALL_SLOTS));}catch{return ALL_SLOTS;}});
+  const [showHours, setShowHours] = useState(false);
+
+  const dayBlocked = blockedSlots[selDate]||[];
+
+  const toggleSlot = (slot) => {
+    const current = blockedSlots[selDate]||[];
+    const updated = current.includes(slot) ? current.filter(s=>s!==slot) : [...current, slot];
+    const newBlocked = {...blockedSlots, [selDate]: updated};
+    setBlockedSlots(newBlocked);
+    localStorage.setItem("blocked_slots", JSON.stringify(newBlocked));
+  };
+
+  const blockFullDay = () => {
+    const newBlocked = {...blockedSlots, [selDate]: [...ALL_SLOTS]};
+    setBlockedSlots(newBlocked);
+    localStorage.setItem("blocked_slots", JSON.stringify(newBlocked));
+  };
+
+  const unblockFullDay = () => {
+    const newBlocked = {...blockedSlots, [selDate]: []};
+    setBlockedSlots(newBlocked);
+    localStorage.setItem("blocked_slots", JSON.stringify(newBlocked));
+  };
+
+  const toggleGlobalSlot = (slot) => {
+    const updated = customSlots.includes(slot) ? customSlots.filter(s=>s!==slot) : [...customSlots, slot].sort();
+    setCustomSlots(updated);
+    localStorage.setItem("custom_slots", JSON.stringify(updated));
+  };
+
+  return (
+    <div>
+      <div style={{marginBottom:24,padding:"14px 18px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,fontSize:13,color:C.textMid,lineHeight:1.7}}>
+        Sélectionne une date et bloque les créneaux que tu veux. Tes clientes verront ces créneaux comme déjà pris.
+      </div>
+
+      {/* Calendrier */}
+      <div style={{background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"20px 18px",marginBottom:20}}>
+        <Calendar selected={selDate} onSelect={setSelDate} bookedDates={Object.keys(blockedSlots).filter(d=>blockedSlots[d]?.length>0)}/>
+      </div>
+
+      {/* Actions journée */}
+      <div style={{fontSize:13,fontWeight:600,color:C.textMid,marginBottom:12}}>{fmtLong(selDate)}</div>
+      <div style={{display:"flex",gap:8,marginBottom:16}}>
+        <button onClick={blockFullDay} style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.textMid,fontSize:12,cursor:"pointer"}}>Bloquer toute la journée</button>
+        <button onClick={unblockFullDay} style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.textMid,fontSize:12,cursor:"pointer"}}>Tout débloquer</button>
+      </div>
+
+      {/* Créneaux du jour */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:32}}>
+        {customSlots.map(s=>{
+          const isBlocked=dayBlocked.includes(s);
+          return (
+            <div key={s} onClick={()=>toggleSlot(s)} style={{padding:"11px 4px",textAlign:"center",borderRadius:10,border:`1.5px solid ${isBlocked?"#c05050":C.border}`,background:isBlocked?"#2a1010":C.surface,color:isBlocked?"#f07070":C.textMid,fontSize:13,cursor:"pointer",transition:"all .15s"}}>
+              {s}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Horaires globaux */}
+      <div style={{borderTop:`1px solid ${C.border}`,paddingTop:24}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:600,color:C.textMid}}>Horaires proposés</div>
+          <button onClick={()=>setShowHours(!showHours)} style={{fontSize:12,color:C.accent,background:"none",border:"none",cursor:"pointer"}}>{showHours?"Fermer":"Modifier"}</button>
+        </div>
+        {showHours&&(
+          <div className="fu">
+            <div style={{fontSize:12,color:C.textLight,marginBottom:12}}>Désactive les créneaux que tu ne veux jamais proposer.</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+              {ALL_SLOTS.map(s=>{
+                const active=customSlots.includes(s);
+                return (
+                  <div key={s} onClick={()=>toggleGlobalSlot(s)} style={{padding:"11px 4px",textAlign:"center",borderRadius:10,border:`1.5px solid ${active?C.accent:C.border}`,background:active?C.accentLight:C.surface,color:active?C.accentDark:C.textLight,fontSize:13,cursor:"pointer",transition:"all .15s"}}>
+                    {s}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AdminView({onExit}) {
   const [code,setCode]=useState(""),[isUnlocked,setIsUnlocked]=useState(false);
   const [rdvs,setRdvs]=useState([]),[profs,setProfs]=useState([]);
@@ -515,11 +625,10 @@ function AdminView({onExit}) {
   if(!isUnlocked) return (
     <div className="fu" style={{padding:"0 20px",maxWidth:360,margin:"0 auto",paddingTop:60}}>
       <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,color:C.text,marginBottom:8}}>Administration</div>
-      <div style={{fontSize:13,color:C.textLight,marginBottom:28}}>Code : <span style={{color:C.textMid}}>nl2024</span></div>
-      <div style={{marginBottom:12}}><Lbl>Code d'accès</Lbl><Inp value={code} onChange={e=>setCode(e.target.value)} type="password" placeholder="••••••"/></div>
+      <div style={{marginBottom:12}}><Lbl>Code d'accès</Lbl><Inp value={code} onChange={e=>setCode(e.target.value)} type="password" placeholder="••••••••••"/></div>
       <div style={{display:"flex",gap:10,marginTop:4}}>
         <GBtn onClick={onExit}>Retour</GBtn>
-        <PBtn onClick={()=>{if(code==="nl2024"){setIsUnlocked(true);load();}else alert("Code incorrect");}}>Accéder</PBtn>
+        <PBtn onClick={()=>{if(code==="2604"){setIsUnlocked(true);load();}else alert("Code incorrect");}}>Accéder</PBtn>
       </div>
     </div>
   );
@@ -579,9 +688,9 @@ function AdminView({onExit}) {
         </div>
       </div>
 
-      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,marginBottom:24}}>
-        {[["today","Aujourd'hui"],["upcoming","À venir"],["all","Tous"],["laser","Laser 🔒"]].map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"11px 4px",background:"none",border:"none",borderBottom:`2px solid ${tab===id?C.accent:"transparent"}`,color:tab===id?C.accentDark:C.textLight,fontSize:11,fontWeight:tab===id?600:400,marginBottom:-1,letterSpacing:.3,cursor:"pointer"}}>{label}</button>
+      <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,marginBottom:24,overflowX:"auto"}}>
+        {[["today","Aujourd'hui"],["upcoming","À venir"],["all","Tous"],["planning","Planning"],["laser","Laser 🔒"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setTab(id)} style={{flexShrink:0,padding:"11px 10px",background:"none",border:"none",borderBottom:`2px solid ${tab===id?C.accent:"transparent"}`,color:tab===id?C.accentDark:C.textLight,fontSize:11,fontWeight:tab===id?600:400,marginBottom:-1,letterSpacing:.3,cursor:"pointer"}}>{label}</button>
         ))}
       </div>
 
@@ -614,6 +723,9 @@ function AdminView({onExit}) {
               </div>
             ))}
         </div>
+      )}
+      {!loading&&tab==="planning"&&(
+        <PlanningAdmin/>
       )}
       {!loading&&tab==="laser"&&(
         <div>
