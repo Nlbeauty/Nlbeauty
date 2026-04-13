@@ -110,7 +110,7 @@ const SERVICES = [
   },
 ];
 
-const SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30"];
+const SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
 const MONTHS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 const DAYS_S = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
 const DAYS_L = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
@@ -267,13 +267,29 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
   const [done,setDone]=useState(null);
 
   const svc=svcId?SERVICES.find(s=>s.id===svcId):null;
-  // Créneaux bloqués : on bloque le slot du RDV + tous les slots couverts par la durée
+  // Créneaux bloqués : horaires auto + durée RDV + blocages manuels
   const blockedSlots = (() => {
     const ALL_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30"];
+    // Créneaux autorisés selon le jour de la semaine
+    const SEMAINE = ["17:00","17:30","18:00","18:30","19:00"]; // Lun-Ven
+    const WEEKEND = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"]; // Sam-Dim
     const blocked = new Set();
-    // Ajouter aussi les créneaux manuellement bloqués
+    // Bloquer selon le jour si une date est sélectionnée
+    if(date) {
+      const dayOfWeek = parseD(date).getDay(); // 0=dim, 1=lun, ..., 6=sam
+      const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+      const allowed = isWeekend ? WEEKEND : SEMAINE;
+      // Récupérer les créneaux débloqués manuellement par l'admin
+      const manualUnblocked = JSON.parse(localStorage.getItem("manual_unblocked")||"{}");
+      const dayUnblocked = manualUnblocked[date]||[];
+      ALL_SLOTS.forEach(s => {
+        if(!allowed.includes(s) && !dayUnblocked.includes(s)) blocked.add(s);
+      });
+    }
+    // Ajouter les blocages manuels admin
     const manualBlocked = JSON.parse(localStorage.getItem("blocked_slots")||"{}");
     (manualBlocked[date]||[]).forEach(s=>blocked.add(s));
+    // Bloquer selon durée des RDV existants
     allRdvs.filter(r=>r.date===date&&r.statut!=="annulé").forEach(r=>{
       const startIdx = ALL_SLOTS.indexOf(r.slot);
       if(startIdx===-1) return;
@@ -514,24 +530,56 @@ function PlanningAdmin() {
 
   const dayBlocked = blockedSlots[selDate]||[];
 
+  // Horaires auto selon le jour
+  const SEMAINE = ["17:00","17:30","18:00","18:30","19:00"];
+  const WEEKEND = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const dayOfWeek = selDate ? parseD(selDate).getDay() : 1;
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  const autoAllowed = isWeekend ? WEEKEND : SEMAINE;
+
+  const [manualUnblocked, setManualUnblocked] = useState(()=>{try{return JSON.parse(localStorage.getItem("manual_unblocked")||"{}");}catch{return {};}});
+  const dayUnblocked = manualUnblocked[selDate]||[];
+
+  // Un créneau est bloqué par défaut si pas dans autoAllowed et pas débloqué manuellement
+  const isAutoBlocked = (slot) => !autoAllowed.includes(slot) && !dayUnblocked.includes(slot);
+  const isManualBlocked = (slot) => (blockedSlots[selDate]||[]).includes(slot);
+  const isSlotBlocked = (slot) => isAutoBlocked(slot) || isManualBlocked(slot);
+
   const toggleSlot = (slot) => {
-    const current = blockedSlots[selDate]||[];
-    const updated = current.includes(slot) ? current.filter(s=>s!==slot) : [...current, slot];
-    const newBlocked = {...blockedSlots, [selDate]: updated};
-    setBlockedSlots(newBlocked);
-    localStorage.setItem("blocked_slots", JSON.stringify(newBlocked));
+    if(isAutoBlocked(slot)) {
+      // Débloquer un créneau auto-bloqué
+      const current = manualUnblocked[selDate]||[];
+      const updated = current.includes(slot) ? current.filter(s=>s!==slot) : [...current, slot];
+      const newUnblocked = {...manualUnblocked, [selDate]: updated};
+      setManualUnblocked(newUnblocked);
+      localStorage.setItem("manual_unblocked", JSON.stringify(newUnblocked));
+    } else {
+      // Bloquer/débloquer un créneau normalement dispo
+      const current = blockedSlots[selDate]||[];
+      const updated = current.includes(slot) ? current.filter(s=>s!==slot) : [...current, slot];
+      const newBlocked = {...blockedSlots, [selDate]: updated};
+      setBlockedSlots(newBlocked);
+      localStorage.setItem("blocked_slots", JSON.stringify(newBlocked));
+    }
   };
 
   const blockFullDay = () => {
     const newBlocked = {...blockedSlots, [selDate]: [...ALL_SLOTS]};
     setBlockedSlots(newBlocked);
     localStorage.setItem("blocked_slots", JSON.stringify(newBlocked));
+    // Supprimer les déblocages manuels du jour
+    const newUnblocked = {...manualUnblocked, [selDate]: []};
+    setManualUnblocked(newUnblocked);
+    localStorage.setItem("manual_unblocked", JSON.stringify(newUnblocked));
   };
 
   const unblockFullDay = () => {
     const newBlocked = {...blockedSlots, [selDate]: []};
     setBlockedSlots(newBlocked);
     localStorage.setItem("blocked_slots", JSON.stringify(newBlocked));
+    const newUnblocked = {...manualUnblocked, [selDate]: [...ALL_SLOTS]};
+    setManualUnblocked(newUnblocked);
+    localStorage.setItem("manual_unblocked", JSON.stringify(newUnblocked));
   };
 
   const toggleGlobalSlot = (slot) => {
@@ -558,12 +606,19 @@ function PlanningAdmin() {
         <button onClick={unblockFullDay} style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.textMid,fontSize:12,cursor:"pointer"}}>Tout débloquer</button>
       </div>
 
+      {/* Légende */}
+      <div style={{display:"flex",gap:12,marginBottom:14,fontSize:11,color:C.textLight}}>
+        <span>🟢 Ouvert</span>
+        <span>🔴 Bloqué auto</span>
+        <span>🔒 Bloqué manuellement</span>
+      </div>
       {/* Créneaux du jour */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:32}}>
-        {customSlots.map(s=>{
-          const isBlocked=dayBlocked.includes(s);
+        {ALL_SLOTS.map(s=>{
+          const autoB=isAutoBlocked(s), manualB=isManualBlocked(s);
+          const blocked=autoB||manualB;
           return (
-            <div key={s} onClick={()=>toggleSlot(s)} style={{padding:"11px 4px",textAlign:"center",borderRadius:10,border:`1.5px solid ${isBlocked?"#c05050":C.border}`,background:isBlocked?"#2a1010":C.surface,color:isBlocked?"#f07070":C.textMid,fontSize:13,cursor:"pointer",transition:"all .15s"}}>
+            <div key={s} onClick={()=>toggleSlot(s)} style={{padding:"11px 4px",textAlign:"center",borderRadius:10,border:`1.5px solid ${manualB?"#c05050":autoB?"#554444":C.accent}`,background:manualB?"#2a1010":autoB?"#1e1616":C.accentLight,color:manualB?"#f07070":autoB?"#6a4444":C.accentDark,fontSize:13,cursor:"pointer",transition:"all .15s",fontWeight:blocked?400:600}}>
               {s}
             </div>
           );
