@@ -8,8 +8,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'NL Beauty',
-        short_name: 'NL Beauty',
+        name: 'Neylika',
+        short_name: 'Neylika',
         description: 'Réservez vos soins en ligne',
         theme_color: '#faf7f4',
         background_color: '#faf7f4',
