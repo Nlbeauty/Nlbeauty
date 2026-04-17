@@ -530,7 +530,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
 
   const handleConfirm=async(sess)=>{
     setShowAuth(false);
-    if(!selPresta||!date||!slot){alert("Informations manquantes : prestation="+selPresta?.nom+" date="+date+" slot="+slot);return;}
+    if(!selPresta||!date||!slot)return;
     try {
       const rdv={
         user_id:sess.user.id,cat_id:svcId,service:svc.label,
