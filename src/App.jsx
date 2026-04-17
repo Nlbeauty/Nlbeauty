@@ -11,6 +11,7 @@ const api = {
   async patch(table, filter, body) { const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`,{method:"PATCH",headers:{...this.h,"Prefer":"return=representation"},body:JSON.stringify(body)}); return r.json(); },
   async signUp(email, password) { const r=await fetch(`${SUPA_URL}/auth/v1/signup`,{method:"POST",headers:{"apikey":SUPA_KEY,"Content-Type":"application/json"},body:JSON.stringify({email,password})}); return r.json(); },
   async signIn(email, password) { const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`,{method:"POST",headers:{"apikey":SUPA_KEY,"Content-Type":"application/json"},body:JSON.stringify({email,password})}); return r.json(); },
+  async refreshToken(refresh_token) { const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=refresh_token`,{method:"POST",headers:{"apikey":SUPA_KEY,"Content-Type":"application/json"},body:JSON.stringify({refresh_token})}); return r.json(); },
   async signOut(token) { await fetch(`${SUPA_URL}/auth/v1/logout`,{method:"POST",headers:{"apikey":SUPA_KEY,"Authorization":`Bearer ${token}`}}); },
   async upsert(table, body, token) { const r=await fetch(`${SUPA_URL}/rest/v1/${table}`,{method:"POST",headers:{...this.ah(token),"Prefer":"return=representation,resolution=merge-duplicates"},body:JSON.stringify(body)}); return r.json(); },
 };
@@ -223,14 +224,14 @@ function AuthModal({onAuth,onClose,booking}) {
         const res=await api.signIn(email,pw);
         if(res.error){setErr("Email ou mot de passe incorrect.");setLoading(false);return;}
         const prof=await fetch(`${SUPA_URL}/rest/v1/profiles?id=eq.${res.user.id}&select=*`,{headers:{"apikey":SUPA_KEY,"Authorization":`Bearer ${res.access_token}`}}).then(r=>r.json());
-        onAuth({user:res.user,token:res.access_token,profile:prof[0]||{}});
+        onAuth({user:res.user,token:res.access_token,refresh_token:res.refresh_token,profile:prof[0]||{}});
       } else {
         if(!prenom||!nom||!tel){setErr("Tous les champs sont requis.");setLoading(false);return;}
         const res=await api.signUp(email,pw);
         if(res.error){setErr(res.error.message);setLoading(false);return;}
         if(res.user){
           await api.upsert("profiles",{id:res.user.id,prenom,nom,tel,email},res.access_token);
-          onAuth({user:res.user,token:res.access_token,profile:{prenom,nom,tel,email}});
+          onAuth({user:res.user,token:res.access_token,refresh_token:res.refresh_token,profile:{prenom,nom,tel,email}});
         } else setErr("Vérifiez votre email pour confirmer.");
       }
     } catch{setErr("Erreur réseau.");}
@@ -688,7 +689,16 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
 
           </div>
 
-          <PBtn onClick={()=>session?handleConfirm(session):setShowAuth(true)}>
+          <PBtn onClick={()=>{
+            if(session){
+              // Vérifier que le slot est bien défini
+              if(!slot){alert("Veuillez sélectionner un créneau horaire.");return;}
+              if(!date){alert("Veuillez sélectionner une date.");return;}
+              handleConfirm(session);
+            } else {
+              setShowAuth(true);
+            }
+          }}>
             {session?"Confirmer le rendez-vous":"Continuer pour confirmer"}
           </PBtn>
           {!session&&<div style={{textAlign:"center",fontSize:12,color:C.textLight,marginTop:10}}>Connexion requise pour finaliser</div>}
@@ -1045,6 +1055,25 @@ export default function App() {
   },[session]);
 
   const handleAuth=(s)=>{setSession(s);localStorage.setItem("nlb_sess",JSON.stringify(s));showToast(`Bienvenue ${s.profile?.prenom||""} !`);};
+  
+  // Refresh automatique du token toutes les 50 minutes
+  useEffect(()=>{
+    const interval = setInterval(async()=>{
+      const saved = localStorage.getItem("nlb_sess");
+      if(!saved) return;
+      try {
+        const s = JSON.parse(saved);
+        if(!s.refresh_token) return;
+        const res = await api.refreshToken(s.refresh_token);
+        if(res.access_token) {
+          const newSession = {...s, token: res.access_token, refresh_token: res.refresh_token||s.refresh_token};
+          setSession(newSession);
+          localStorage.setItem("nlb_sess", JSON.stringify(newSession));
+        }
+      } catch(e) { console.log("Refresh failed:", e); }
+    }, 50*60*1000);
+    return ()=>clearInterval(interval);
+  },[]);
   const handleBooked=(rdv)=>{setAllRdvs(p=>[...p,rdv]);setClientRdvs(p=>[...p,rdv]);setTab("mesrdvs");showToast("Rendez-vous confirmé !");};
   const handleLogout=async()=>{if(session?.token)await api.signOut(session.token);localStorage.removeItem("nlb_sess");setSession(null);setClientRdvs([]);showToast("Déconnecté·e");};
 
