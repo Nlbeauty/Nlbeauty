@@ -661,8 +661,8 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
             selectedSlot={slot}
             onSelect={(d,s)=>{
               setDate(d);
-              setSlot(s||"");
-              if(s) sc(r5);
+              if(s) { setSlot(s); sc(r5); }
+              else setSlot("");
             }}
           />
         </div>
