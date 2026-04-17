@@ -636,7 +636,6 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
                                   {p.prixNormal&&<div style={{fontSize:10,color:"#e07070",fontWeight:700,letterSpacing:.5}}>-50%</div>}
                                 </>
                               }
-                              }
                             </div>
                           </div>
                         );
