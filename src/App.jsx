@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
 const SUPA_URL = "https://xpackkiprznsrotsohce.supabase.co";
-const SUPA_KEY = "sb_publishable_kwmh9aAwybdtGLZWA7Mqfg_PrsEEuGu";
+const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwYWNra2lwcnpuc3JvdHNvaGNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NTkzMTIsImV4cCI6MjA5MTIzNTMxMn0.BBZzEnIkHfGcrMPoRa8cMp3_KKrlFAnsg8lXQijC9dA";
 
 const api = {
   h: { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
