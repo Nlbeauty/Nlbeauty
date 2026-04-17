@@ -530,7 +530,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
 
   const handleConfirm=async(sess)=>{
     setShowAuth(false);
-    if(!selPresta||!date||!slot)return;
+    if(!selPresta||!date||!slot){alert("Informations manquantes : prestation="+selPresta?.nom+" date="+date+" slot="+slot);return;}
     try {
       const rdv={
         user_id:sess.user.id,cat_id:svcId,service:svc.label,
@@ -690,7 +690,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
           </div>
 
           <PBtn onClick={()=>session?handleConfirm(session):setShowAuth(true)}>
-            {session?selPresta.acompte>0?`Confirmer et payer ${selPresta.acompte} €`:"Confirmer le rendez-vous":"Continuer pour confirmer"}
+            {session?"Confirmer le rendez-vous":"Continuer pour confirmer"}
           </PBtn>
           {!session&&<div style={{textAlign:"center",fontSize:12,color:C.textLight,marginTop:10}}>Connexion requise pour finaliser</div>}
           <div style={{textAlign:"center",fontSize:11,color:C.textLight,marginTop:8}}>Annulation sans frais jusqu'à 24h avant</div>
