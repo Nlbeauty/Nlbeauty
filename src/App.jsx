@@ -70,17 +70,12 @@ const NTFY_TOPIC = "neylika-rdv-2604";
 
 const sendPush = async (title, message) => {
   try {
-    await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
+    const body = JSON.stringify({ topic: NTFY_TOPIC, title, message, priority: 4, tags: ["calendar"] });
+    await fetch("https://ntfy.sh", {
       method: "POST",
-      headers: {
-        "Title": title,
-        "Priority": "high",
-        "Tags": "calendar",
-        "Content-Type": "text/plain",
-        "Access-Control-Allow-Origin": "*",
-      },
+      headers: { "Content-Type": "application/json" },
       mode: "no-cors",
-      body: message,
+      body,
     });
   } catch(e) { console.log("Push error:", e); }
 };
