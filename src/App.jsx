@@ -576,14 +576,15 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
         statut:"confirmé",
       };
       const res=await api.post("rdvs",rdv,sess.token);
-      alert("Réponse Supabase: " + JSON.stringify(res).slice(0,200));
-      if(res&&res[0]){
-        setDone(res[0]);
-        onBooked(res[0]);
+      const saved = Array.isArray(res) ? res[0] : res;
+      if(saved && !saved.error){
+        setDone(saved);
+        onBooked(saved);
         sc(doneRef);
-        await sendEmails(rdv, sess.user.email);
+        // Envoyer emails quoi qu'il arrive si on a les infos
+        sendEmails(rdv, sess.user.email);
       }
-    } catch(e){alert("Erreur : " + e.message);}
+    } catch(e){console.log("Erreur réservation:", e);}
   };
 
   const selectPresta=(p,subcat)=>{
@@ -728,14 +729,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
 
           </div>
 
-          <PBtn onClick={()=>{
-            if(session){
-              alert("slot="+slot+" date="+date+" presta="+selPresta?.nom);
-              handleConfirm(session);
-            } else {
-              setShowAuth(true);
-            }
-          }}>
+          <PBtn onClick={()=>session?handleConfirm(session):setShowAuth(true)}>
             {session?"Confirmer le rendez-vous":"Continuer pour confirmer"}
           </PBtn>
           {!session&&<div style={{textAlign:"center",fontSize:12,color:C.textLight,marginTop:10}}>Connexion requise pour finaliser</div>}
