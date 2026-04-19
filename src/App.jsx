@@ -72,7 +72,14 @@ const sendPush = async (title, message) => {
   try {
     await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
       method: "POST",
-      headers: { "Title": title, "Priority": "high", "Tags": "calendar" },
+      headers: {
+        "Title": title,
+        "Priority": "high",
+        "Tags": "calendar",
+        "Content-Type": "text/plain",
+        "Access-Control-Allow-Origin": "*",
+      },
+      mode: "no-cors",
       body: message,
     });
   } catch(e) { console.log("Push error:", e); }
