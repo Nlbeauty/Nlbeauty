@@ -66,6 +66,18 @@ const sendCancelEmail = async (rdv) => {
   } catch(e) { console.log("Cancel email error:", e); }
 };
 
+const NTFY_TOPIC = "neylika-rdv-2604";
+
+const sendPush = async (title, message) => {
+  try {
+    await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
+      method: "POST",
+      headers: { "Title": title, "Priority": "high", "Tags": "calendar" },
+      body: message,
+    });
+  } catch(e) { console.log("Push error:", e); }
+};
+
 const api = {
   h: { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
   ah: (t) => ({ "apikey": SUPA_KEY, "Authorization": `Bearer ${t}`, "Content-Type": "application/json", "Prefer": "return=representation" }),
@@ -612,8 +624,9 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
       };
       const res=await api.post("rdvs",rdv,sess.token);
       const saved = Array.isArray(res) ? res[0] : res;
-      // Envoyer les emails dans tous les cas
+      // Envoyer les emails et notification push
       sendEmails(rdv, sess.user.email);
+      sendPush(`Nouveau RDV — ${rdv.client_prenom} ${rdv.client_nom}`, `${rdv.prestation} · ${rdv.date} à ${rdv.slot}`);
       if(saved){
         setDone(saved);
         onBooked(saved);
@@ -789,6 +802,7 @@ function MesRdvsView({rdvs,loading}) {
     if(!confirm("Annuler ce rendez-vous ?")) return;
     await api.patch("rdvs",`id=eq.${r.id}`,{statut:"annulé"});
     await sendCancelEmail(r);
+    sendPush(`❌ Annulation — ${r.client_prenom} ${r.client_nom}`, `${r.prestation} · ${r.date} à ${r.slot}`);
     window.location.reload();
   };
   const Card=({r})=>(
@@ -935,7 +949,10 @@ function AdminView({onExit}) {
     setRdvs(p=>p.map(r=>r.id===id?{...r,statut:"annulé"}:r));
     // Email annulation
     const rdvAnn = rdvs.find(r=>r.id===id);
-    if(rdvAnn) sendCancelEmail(rdvAnn);
+    if(rdvAnn) {
+      sendCancelEmail(rdvAnn);
+      sendPush(`❌ Annulation — ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`, `${rdvAnn.prestation} · ${rdvAnn.date} à ${rdvAnn.slot}`);
+    }
   };
 
   if(!isUnlocked) return (
