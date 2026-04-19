@@ -11,13 +11,18 @@ const EJS_TPL_PRO = "template_7hrk5ea";
 const EJS_KEY = "xmgbAOdC2q5UulDnS";
 
 const sendEmails = async (rdv, clientEmail) => {
+  const formatDate = (s) => {
+    const [y,m,d] = s.split("-");
+    const mois = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+    return `${d} ${mois[+m-1]} ${y}`;
+  };
   const params = {
     client_prenom: rdv.client_prenom,
     client_nom: rdv.client_nom,
     client_tel: rdv.client_tel,
     client_email: clientEmail,
     prestation: rdv.prestation,
-    date: rdv.date,
+    date: formatDate(rdv.date),
     slot: rdv.slot,
     prix: rdv.prix,
   };
@@ -28,7 +33,7 @@ const sendEmails = async (rdv, clientEmail) => {
       body: JSON.stringify({ service_id: EJS_SERVICE, template_id: tpl, user_id: EJS_KEY, template_params: { ...params, to_email: to } }),
     });
     await send(EJS_TPL_CLIENTE, clientEmail);
-    await send(EJS_TPL_PRO, "elrakaawi.nevine@gmail.com");
+    await send(EJS_TPL_PRO, "nlbeauty31@gmail.com");
   } catch(e) { console.log("Email error:", e); }
 };
 
