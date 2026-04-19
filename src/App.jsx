@@ -576,11 +576,11 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
         statut:"confirmé",
       };
       const res=await api.post("rdvs",rdv,sess.token);
+      alert("Réponse Supabase: " + JSON.stringify(res).slice(0,200));
       if(res&&res[0]){
         setDone(res[0]);
         onBooked(res[0]);
         sc(doneRef);
-        // Envoyer les emails de confirmation
         await sendEmails(rdv, sess.user.email);
       }
     } catch(e){alert("Erreur : " + e.message);}
