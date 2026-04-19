@@ -310,6 +310,9 @@ function PlanityDatePicker({selPresta,allRdvs,allSupaBlocked,selectedDate,select
         const sl=allowed[j+k];
         if(!sl){ok=false;break;}
         if(supaDay.includes(sl)){ok=false;break;}
+        // Vérifier règle 24h : le créneau doit être dans plus de 24h
+        const slotDateTime = new Date(`${dateStr}T${sl}:00`);
+        if(slotDateTime.getTime() - Date.now() < 24*60*60*1000){ok=false;break;}
         const idx=ALL_SLOTS.indexOf(sl);
         for(const r of rdvsDay){
           const rIdx=ALL_SLOTS.indexOf(r.slot);
@@ -362,7 +365,7 @@ function PlanityDatePicker({selPresta,allRdvs,allSupaBlocked,selectedDate,select
           {Array(daysInMonth).fill(null).map((_,i)=>{
             const d=i+1;
             const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-            const isPast=ds<minDateStr;
+            const isPast=ds<minDateStr; // minDateStr = demain si avant l'heure min
             const avail=!isPast?getAvailSlots(ds):[];
             const hasDispo=avail.length>0;
             const isSel=ds===selectedDate;
