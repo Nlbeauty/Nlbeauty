@@ -39,6 +39,30 @@ const sendEmails = async (rdv, clientEmail) => {
   } catch(e) { console.log("Email error:", e); }
 };
 
+const sendCancelEmail = async (rdv) => {
+  const JOURS = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+  const MOIS = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
+  const dateObj = new Date(rdv.date + "T12:00:00");
+  const dateFr = `${JOURS[dateObj.getDay()]} ${dateObj.getDate()} ${MOIS[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
+  const params = {
+    client_prenom: rdv.client_prenom,
+    client_nom: rdv.client_nom,
+    prestation: rdv.prestation,
+    date: dateFr,
+    slot: rdv.slot,
+    to_email: "nlbeauty31@gmail.com",
+  };
+  try {
+    await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ service_id: EJS_SERVICE, template_id: EJS_TPL_PRO, user_id: EJS_KEY,
+        template_params: { ...params, prestation: "❌ ANNULATION — " + rdv.prestation }
+      }),
+    });
+  } catch(e) { console.log("Cancel email error:", e); }
+};
+
 const api = {
   h: { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
   ah: (t) => ({ "apikey": SUPA_KEY, "Authorization": `Bearer ${t}`, "Content-Type": "application/json", "Prefer": "return=representation" }),
@@ -307,7 +331,7 @@ function AuthModal({onAuth,onClose,booking}) {
         <div style={{marginBottom:12}}><Lbl>Email</Lbl><Inp value={email} onChange={e=>setEmail(e.target.value)} placeholder="marie@email.fr" type="email"/></div>
         <div style={{marginBottom:12}}><Lbl>Mot de passe</Lbl><Inp value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••••" type="password"/></div>
         {err&&<div style={{fontSize:13,color:"#c05050",marginBottom:14,padding:"10px 14px",background:"#fff0f0",borderRadius:8}}>{err}</div>}
-        <PBtn onClick={submit} disabled={loading}>{loading?"Chargement…":mode==="login"?"Confirmer ma réservation":"Créer mon compte et réserver"}</PBtn>
+        <PBtn onClick={submit} disabled={loading}>{loading?"Chargement…":mode==="login"?booking?"Confirmer ma réservation":"Se connecter":booking?"Créer mon compte et réserver":"Créer un compte"}</PBtn>
         <div style={{textAlign:"center",fontSize:11,color:C.textLight,marginTop:14,lineHeight:1.6}}>Vos données sont utilisées uniquement pour la gestion de vos rendez-vous.</div>
       </div>
     </div>
@@ -760,6 +784,7 @@ function MesRdvsView({rdvs,loading}) {
   const handleCancel=async(r)=>{
     if(!confirm("Annuler ce rendez-vous ?")) return;
     await api.patch("rdvs",`id=eq.${r.id}`,{statut:"annulé"});
+    sendCancelEmail(r);
     window.location.reload();
   };
   const Card=({r})=>(
@@ -906,6 +931,9 @@ function AdminView({onExit}) {
     if(!confirm("Annuler ce rendez-vous ?"))return;
     await api.patch("rdvs",`id=eq.${id}`,{statut:"annulé"});
     setRdvs(p=>p.map(r=>r.id===id?{...r,statut:"annulé"}:r));
+    // Email annulation
+    const rdvAnn = rdvs.find(r=>r.id===id);
+    if(rdvAnn) sendCancelEmail(rdvAnn);
   };
 
   if(!isUnlocked) return (
