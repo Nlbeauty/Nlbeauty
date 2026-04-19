@@ -45,11 +45,14 @@ const sendCancelEmail = async (rdv) => {
   const dateObj = new Date(rdv.date + "T12:00:00");
   const dateFr = `${JOURS[dateObj.getDay()]} ${dateObj.getDate()} ${MOIS[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
   const params = {
-    client_prenom: rdv.client_prenom,
-    client_nom: rdv.client_nom,
-    prestation: rdv.prestation,
+    client_prenom: rdv.client_prenom||"",
+    client_nom: rdv.client_nom||"",
+    client_tel: rdv.client_tel||"",
+    client_email: rdv.client_email||"",
+    prestation: "❌ ANNULATION — " + rdv.prestation,
     date: dateFr,
-    slot: rdv.slot,
+    slot: rdv.slot||"",
+    prix: rdv.prix||0,
     to_email: "nlbeauty31@gmail.com",
   };
   try {
@@ -57,7 +60,7 @@ const sendCancelEmail = async (rdv) => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ service_id: EJS_SERVICE, template_id: EJS_TPL_PRO, user_id: EJS_KEY,
-        template_params: { ...params, prestation: "❌ ANNULATION — " + rdv.prestation }
+        template_params: params
       }),
     });
   } catch(e) { console.log("Cancel email error:", e); }
