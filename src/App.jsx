@@ -420,7 +420,7 @@ function PlanityDatePicker({selPresta,allRdvs,allSupaBlocked,selectedDate,select
 }
 
 // ── RÉSERVATION ───────────────────────────────────────────────────────────────
-function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
+function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
   const [svcId,setSvcId]=useState(null);
   const [openSub,setOpenSub]=useState(null);
   const [selPresta,setSelPresta]=useState(null);
@@ -566,7 +566,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked}) {
 
   return (
     <div>
-      {showAuth&&<AuthModal onAuth={handleConfirm} onClose={()=>setShowAuth(false)} booking={selPresta?{nom:selPresta.nom,date,slot,prix:selPresta.prix||0}:null}/>}
+      {showAuth&&<AuthModal onAuth={(s)=>{if(onAuth)onAuth(s);handleConfirm(s);}} onClose={()=>setShowAuth(false)} booking={selPresta?{nom:selPresta.nom,date,slot,prix:selPresta.prix||0}:null}/>}
 
       {/* ── SERVICES ── */}
       <div>
@@ -850,7 +850,6 @@ function AdminView({onExit}) {
   const [rdvs,setRdvs]=useState([]),[profs,setProfs]=useState([]);
   const [loading,setLoading]=useState(false),[tab,setTab]=useState("today");
   const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
-  const [showLoginModal,setShowLoginModal]=useState(false);
 
   const load=async()=>{
     setLoading(true);
@@ -1086,7 +1085,7 @@ export default function App() {
     <div style={{minHeight:"100vh",background:C.bg}}>
       <GS/>
       {toast&&<Toast {...toast}/>}
-      {showLoginModal&&<AuthModal onAuth={(s)=>{handleAuth(s);setShowLoginModal(false);}} onClose={()=>setShowLoginModal(false)} booking={null}/>}
+      {showLoginModal&&<AuthModal onAuth={(s)=>{handleAuth(s);setShowLoginModal(false);setTab("compte");}} onClose={()=>setShowLoginModal(false)} booking={null}/>}
       <div style={{maxWidth:520,margin:"0 auto",padding:"0 20px 100px"}}>
         <div style={{paddingTop:48,paddingBottom:36}}>
           <div style={{fontSize:9,letterSpacing:3,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>Institut de beauté · Toulouse</div>
@@ -1104,7 +1103,7 @@ export default function App() {
           <p style={{fontSize:12,color:C.textLight,marginTop:10,lineHeight:1.7,letterSpacing:1,fontStyle:"italic"}}>Ton espace beauté à domicile · Ongles · Laser · Bronzage</p>
         </div>
 
-        {tab==="reserver"&&<ReservationView session={session} allRdvs={allRdvs} onBooked={handleBooked} laserUnlocked={laserUnlocked}/>}
+        {tab==="reserver"&&<ReservationView session={session} allRdvs={allRdvs} onBooked={handleBooked} laserUnlocked={laserUnlocked} onAuth={handleAuth}/>}
 
         {tab==="mesrdvs"&&(
           <div className="fu">
