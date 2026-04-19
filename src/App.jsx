@@ -583,7 +583,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
         // Envoyer les emails de confirmation
         await sendEmails(rdv, sess.user.email);
       }
-    } catch{alert("Erreur lors de la réservation.");}
+    } catch(e){alert("Erreur : " + e.message);}
   };
 
   const selectPresta=(p,subcat)=>{
