@@ -4,6 +4,49 @@ const SUPA_URL = "https://xpackkiprznsrotsohce.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwYWNra2lwcnpuc3JvdHNvaGNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NTkzMTIsImV4cCI6MjA5MTIzNTMxMn0.BBZzEnIkHfGcrMPoRa8cMp3_KKrlFAnsg8lXQijC9dA";
 const SUPA_PUB = "sb_publishable_kwmh9aAwybdtGLZWA7Mqfg_PrsEEuGu";
 
+// ─── EMAILJS ──────────────────────────────────────────────────────────────────
+const EJS_SERVICE = "service_gxw3g8j";
+const EJS_TPL_CLIENTE = "template_db2x2jl";
+const EJS_TPL_PRO = "template_7hrk5ea";
+const EJS_KEY = "xmgbAOdC2q5UulDnS";
+
+const sendEmails = async (rdv, clientEmail) => {
+  const params = {
+    client_prenom: rdv.client_prenom,
+    client_nom: rdv.client_nom,
+    client_tel: rdv.client_tel,
+    client_email: clientEmail,
+    prestation: rdv.prestation,
+    date: rdv.date,
+    slot: rdv.slot,
+    prix: rdv.prix,
+  };
+  try {
+    // Email à la cliente
+    await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        service_id: EJS_SERVICE,
+        template_id: EJS_TPL_CLIENTE,
+        user_id: EJS_KEY,
+        template_params: { ...params, to_email: clientEmail },
+      }),
+    });
+    // Email à Névine
+    await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        service_id: EJS_SERVICE,
+        template_id: EJS_TPL_PRO,
+        user_id: EJS_KEY,
+        template_params: { ...params, to_email: "elrakaawi.nevine@gmail.com" },
+      }),
+    });
+  } catch(e) { console.log("Email error:", e); }
+};
+
 const api = {
   h: { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
   ah: (t) => ({ "apikey": SUPA_KEY, "Authorization": `Bearer ${t}`, "Content-Type": "application/json", "Prefer": "return=representation" }),
@@ -547,7 +590,13 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
         statut:"confirmé",
       };
       const res=await api.post("rdvs",rdv,sess.token);
-      if(res&&res[0]){setDone(res[0]);onBooked(res[0]);sc(doneRef);}
+      if(res&&res[0]){
+        setDone(res[0]);
+        onBooked(res[0]);
+        sc(doneRef);
+        // Envoyer les emails de confirmation
+        await sendEmails(rdv, sess.user.email);
+      }
     } catch{alert("Erreur lors de la réservation.");}
   };
 
