@@ -787,7 +787,7 @@ function MesRdvsView({rdvs,loading}) {
   const handleCancel=async(r)=>{
     if(!confirm("Annuler ce rendez-vous ?")) return;
     await api.patch("rdvs",`id=eq.${r.id}`,{statut:"annulé"});
-    sendCancelEmail(r);
+    await sendCancelEmail(r);
     window.location.reload();
   };
   const Card=({r})=>(
