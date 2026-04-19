@@ -804,10 +804,8 @@ function MesRdvsView({rdvs,loading}) {
             <div style={{fontSize:14,fontWeight:700,color:C.textMid}}>{r.prix} €</div>
           </div>
         </div>
-        {r.statut!=="annulé"&&r.date>=todayStr()&&(
-          canCancel(r)
-            ?<button onClick={()=>handleCancel(r)} style={{marginTop:10,fontSize:12,color:"#c05050",background:"none",border:"1px solid #3a1a1a",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Annuler</button>
-            :<div style={{marginTop:8,fontSize:11,color:C.textLight,fontStyle:"italic"}}>Annulation impossible — moins de 24h</div>
+        {r.statut!=="annulé"&&r.date>=todayStr()&&canCancel(r)&&(
+          <button onClick={()=>handleCancel(r)} style={{marginTop:10,fontSize:12,color:"#c05050",background:"none",border:"1px solid #3a1a1a",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Annuler</button>
         )}
       </div>
     </div>
