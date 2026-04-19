@@ -22,19 +22,13 @@ const sendEmails = async (rdv, clientEmail) => {
     prix: rdv.prix,
   };
   try {
-    if(window.emailjs) {
-      window.emailjs.init({publicKey: EJS_KEY});
-      // Email à la cliente
-      await window.emailjs.send(EJS_SERVICE, EJS_TPL_CLIENTE, { ...params, to_email: clientEmail });
-      // Email à Névine
-      await window.emailjs.send(EJS_SERVICE, EJS_TPL_PRO, { ...params, to_email: "elrakaawi.nevine@gmail.com" });
-    } else {
-      // Fallback fetch
-      const body = (tpl, to) => JSON.stringify({service_id:EJS_SERVICE,template_id:tpl,user_id:EJS_KEY,template_params:{...params,to_email:to}});
-      await fetch("https://api.emailjs.com/api/v1.0/email/send",{method:"POST",headers:{"Content-Type":"application/json"},body:body(EJS_TPL_CLIENTE,clientEmail)});
-      await fetch("https://api.emailjs.com/api/v1.0/email/send",{method:"POST",headers:{"Content-Type":"application/json"},body:body(EJS_TPL_PRO,"elrakaawi.nevine@gmail.com")});
-    }
-    console.log("Emails envoyés !");
+    const send = (tpl, to) => fetch("https://api.emailjs.com/api/v1.0/email/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ service_id: EJS_SERVICE, template_id: tpl, user_id: EJS_KEY, template_params: { ...params, to_email: to } }),
+    });
+    await send(EJS_TPL_CLIENTE, clientEmail);
+    await send(EJS_TPL_PRO, "elrakaawi.nevine@gmail.com");
   } catch(e) { console.log("Email error:", e); }
 };
 
@@ -171,7 +165,7 @@ const C = {
 const GS = () => (
   <>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Raleway:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+
     <style>{`
       *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
       body{background:${C.bg};font-family:'Raleway',sans-serif;color:${C.text};}
@@ -747,7 +741,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
             {session?"Confirmer le rendez-vous":"Continuer pour confirmer"}
           </PBtn>
           {!session&&<div style={{textAlign:"center",fontSize:12,color:C.textLight,marginTop:10}}>Connexion requise pour finaliser</div>}
-          <div style={{textAlign:"center",fontSize:11,color:C.textLight,marginTop:8}}>Annulation sans frais jusqu'à 24h avant</div>
+
         </div>
       )}
     </div>
