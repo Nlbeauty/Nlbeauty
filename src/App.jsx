@@ -577,12 +577,12 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
       };
       const res=await api.post("rdvs",rdv,sess.token);
       const saved = Array.isArray(res) ? res[0] : res;
-      if(saved && !saved.error){
+      // Envoyer les emails dans tous les cas
+      sendEmails(rdv, sess.user.email);
+      if(saved){
         setDone(saved);
         onBooked(saved);
         sc(doneRef);
-        // Envoyer emails quoi qu'il arrive si on a les infos
-        sendEmails(rdv, sess.user.email);
       }
     } catch(e){console.log("Erreur réservation:", e);}
   };
