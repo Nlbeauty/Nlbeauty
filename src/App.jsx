@@ -277,7 +277,7 @@ function Calendar({selected,onSelect,bookedDates=[],unavailableDates=[],firstAva
 // ── AUTH MODAL ────────────────────────────────────────────────────────────────
 function AuthModal({onAuth,onClose,booking}) {
   const [mode,setMode]=useState("login");
-  const [email,setEmail]=useState(""),[pw,setPw]=useState("");
+  const [email,setEmail]=useState(()=>localStorage.getItem("nlb_email")||""),[pw,setPw]=useState("");
   const [prenom,setPrenom]=useState(""),[nom,setNom]=useState(""),[tel,setTel]=useState("");
   const [loading,setLoading]=useState(false),[err,setErr]=useState("");
 
@@ -288,6 +288,7 @@ function AuthModal({onAuth,onClose,booking}) {
         const res=await api.signIn(email,pw);
         if(res.error){setErr("Email ou mot de passe incorrect.");setLoading(false);return;}
         const prof=await fetch(`${SUPA_URL}/rest/v1/profiles?id=eq.${res.user.id}&select=*`,{headers:{"apikey":SUPA_PUB,"Authorization":`Bearer ${res.access_token}`}}).then(r=>r.json());
+        localStorage.setItem("nlb_email", email);
         onAuth({user:res.user,token:res.access_token,refresh_token:res.refresh_token,profile:prof[0]||{}});
       } else {
         if(!prenom||!nom||!tel){setErr("Tous les champs sont requis.");setLoading(false);return;}
