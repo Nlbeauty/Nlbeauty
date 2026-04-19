@@ -13,8 +13,10 @@ const EJS_KEY = "xmgbAOdC2q5UulDnS";
 const sendEmails = async (rdv, clientEmail) => {
   const formatDate = (s) => {
     const [y,m,d] = s.split("-");
+    const jours = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
     const mois = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
-    return `${d} ${mois[+m-1]} ${y}`;
+    const date = new Date(+y, +m-1, +d);
+    return `${jours[date.getDay()]} ${+d} ${mois[+m-1]} ${y}`;
   };
   const params = {
     client_prenom: rdv.client_prenom,
