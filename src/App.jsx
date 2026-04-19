@@ -5,7 +5,7 @@ const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsI
 const SUPA_PUB = "sb_publishable_kwmh9aAwybdtGLZWA7Mqfg_PrsEEuGu";
 
 // ─── EMAILJS ──────────────────────────────────────────────────────────────────
-const EJS_SERVICE = "service_gxw3g8j";
+const EJS_SERVICE = "service_kavvgs8";
 const EJS_TPL_CLIENTE = "template_db2x2jl";
 const EJS_TPL_PRO = "template_7hrk5ea";
 const EJS_KEY = "xmgbAOdC2q5UulDnS";
