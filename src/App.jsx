@@ -730,9 +730,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
 
           <PBtn onClick={()=>{
             if(session){
-              // Vérifier que le slot est bien défini
-              if(!slot){alert("Veuillez sélectionner un créneau horaire.");return;}
-              if(!date){alert("Veuillez sélectionner une date.");return;}
+              alert("slot="+slot+" date="+date+" presta="+selPresta?.nom);
               handleConfirm(session);
             } else {
               setShowAuth(true);
