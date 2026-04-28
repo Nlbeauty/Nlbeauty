@@ -70,12 +70,11 @@ const NTFY_TOPIC = "neylika-rdv-2604";
 
 const sendPush = async (title, message) => {
   try {
-    const body = JSON.stringify({ topic: NTFY_TOPIC, title, message, priority: 4, tags: ["calendar"] });
-    await fetch("https://ntfy.sh", {
+    // Utiliser l'API EmailJS pour envoyer la notif ntfy via leurs serveurs
+    await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      body: `${title}\n${message}`,
       mode: "no-cors",
-      body,
     });
   } catch(e) { console.log("Push error:", e); }
 };
