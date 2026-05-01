@@ -1269,14 +1269,25 @@ export default function App() {
             )}
           </div>
           <p style={{fontSize:15,color:"#d4c4ec",marginTop:10,lineHeight:1.7,letterSpacing:.5,fontStyle:"italic"}}>Ton espace beauté à domicile · Ongles · Laser · Bronzage</p>
-          <a href="https://www.instagram.com/neylika31/" target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:12,textDecoration:"none"}}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="2" y="2" width="20" height="20" rx="6" stroke="#c9a0c0" strokeWidth="1.5"/>
-              <circle cx="12" cy="12" r="4" stroke="#c9a0c0" strokeWidth="1.5"/>
-              <circle cx="17.5" cy="6.5" r="1" fill="#c9a0c0"/>
-            </svg>
-            <span style={{fontSize:13,color:C.accent,letterSpacing:.5}}>@neylika31</span>
-          </a>
+          <div style={{display:"flex",gap:12,marginTop:12,alignItems:"center"}}>
+            <a href="https://www.instagram.com/neylika31/" target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,textDecoration:"none"}}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <rect x="2" y="2" width="20" height="20" rx="6" stroke="#c9a0c0" strokeWidth="1.5"/>
+                <circle cx="12" cy="12" r="4" stroke="#c9a0c0" strokeWidth="1.5"/>
+                <circle cx="17.5" cy="6.5" r="1" fill="#c9a0c0"/>
+              </svg>
+              <span style={{fontSize:16,color:C.accent,letterSpacing:.5,fontWeight:500}}>@neylika31</span>
+            </a>
+            <a href="https://ig.me/m/neylika31" target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,textDecoration:"none",background:C.accentLight,border:`1px solid ${C.accent}`,borderRadius:20,padding:"5px 12px"}}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.96 9.96 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z" stroke="#c9a0c0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="8.5" cy="12" r="1" fill="#c9a0c0"/>
+                <circle cx="12" cy="12" r="1" fill="#c9a0c0"/>
+                <circle cx="15.5" cy="12" r="1" fill="#c9a0c0"/>
+              </svg>
+              <span style={{fontSize:12,color:C.accent}}>Me contacter</span>
+            </a>
+          </div>
         </div>
 
         {tab==="reserver"&&<ReservationView session={session} allRdvs={allRdvs} onBooked={handleBooked} laserUnlocked={laserUnlocked} onAuth={handleAuth}/>}
