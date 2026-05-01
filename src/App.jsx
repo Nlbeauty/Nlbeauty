@@ -35,7 +35,6 @@ const sendEmails = async (rdv, clientEmail) => {
       body: JSON.stringify({ service_id: EJS_SERVICE, template_id: tpl, user_id: EJS_KEY, template_params: { ...params, to_email: to } }),
     });
     await send(EJS_TPL_CLIENTE, clientEmail);
-    await send(EJS_TPL_PRO, "nlbeauty31@gmail.com");
   } catch(e) { console.log("Email error:", e); }
 };
 
@@ -143,7 +142,8 @@ const SERVICES = [
     locked: true,
     subcats: [
       {
-        id: "laser_consult", label: "Consultation", noLock: true,
+        id: "laser_consult", label: "Consultation obligatoire", noLock: true,
+        note: "💜 La consultation est obligatoire avant tout traitement laser. Les 20 € seront déduits de votre première prestation si vous poursuivez votre parcours avec nous.",
         prestations: [
           { id:"lc1", nom:"Consultation", duree:30, prix:20, acompte:0 },
         ],
@@ -203,10 +203,10 @@ function daysIn(y,m) { return new Date(y,m+1,0).getDate(); }
 const C = {
   bg:"#1a1620", surface:"#221e2a", surfaceAlt:"#1e1a26",
   border:"#2e2838", borderLight:"#281e30",
-  text:"#f0eaf8", textMid:"#b8a8cc", textLight:"#7a6a8a",
-  accent:"#c9a0c0", accentDark:"#9a6090", accentLight:"#2e1e30",
-  locked:"#2a2040", lockedText:"#a090c8",
-  warn:"#2a2010", warnText:"#c8a840", warnBorder:"#4a3820",
+  text:"#ffffff", textMid:"#d4c4e8", textLight:"#a090b8",
+  accent:"#c9a0c0", accentDark:"#c090b8", accentLight:"#2e1e30",
+  locked:"#2a2040", lockedText:"#b8a8d8",
+  warn:"#2a2010", warnText:"#d8b850", warnBorder:"#4a3820",
 };
 
 const GS = () => (
@@ -677,7 +677,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
                     {s.label}
                     {locked&&!active&&<span style={{fontSize:10,background:C.locked,color:C.lockedText,padding:"2px 8px",borderRadius:10,fontWeight:500}}>Consultation dispo</span>}
                   </div>
-                  <div style={{fontSize:12,color:C.textLight,marginTop:3}}>{s.desc}</div>
+                  <div style={{fontSize:13,color:'#b8a8d0',marginTop:3}}>{s.desc}</div>
                 </div>
                 <div style={{width:8,height:8,borderRadius:"50%",background:active?s.color:C.border,flexShrink:0}}/>
               </div>
@@ -715,7 +715,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
                           <div key={p.id} onClick={()=>!p.devis&&selectPresta(p,sub)} style={{padding:"14px 18px",borderTop:i>0?`1px solid ${C.borderLight}`:"none",display:"flex",justifyContent:"space-between",alignItems:"center",background:active?C.accentLight:"transparent",cursor:p.devis?"default":"pointer",transition:"background .15s"}}>
                             <div>
                               <div style={{fontSize:14,fontWeight:active?600:400,color:active?C.accentDark:C.text}}>{p.nom}</div>
-                              <div style={{fontSize:12,color:C.textLight,marginTop:2}}>{p.duree} min</div>
+                              <div style={{fontSize:12,color:"#a090c0",marginTop:2}}>{p.duree} min</div>
                             </div>
                             <div style={{textAlign:"right",flexShrink:0}}>
                               {p.devis
@@ -938,10 +938,12 @@ function AdminView({onExit}) {
     setLoading(false);
   };
 
-  const toggleLaser=(uid)=>{
-    const updated={...laserAccess,[uid]:!laserAccess[uid]};
+  const toggleLaser=async(uid)=>{
+    const newVal = !laserAccess[uid];
+    const updated={...laserAccess,[uid]:newVal};
     setLaserAccess(updated);
     localStorage.setItem("laser_access",JSON.stringify(updated));
+    await api.patch("profiles",`id=eq.${uid}`,{laser_access:newVal});
   };
 
   const cancel=async(id)=>{
@@ -1110,6 +1112,80 @@ function AdminView({onExit}) {
   );
 }
 
+// ── FIDÉLITÉ ─────────────────────────────────────────────────────────────────
+function FideliteCard({rdvs}) {
+  // Compter uniquement les RDV ongles et spray tan confirmés
+  const rdvOngles = rdvs.filter(r=>r.cat_id==="ongles"&&r.statut==="confirmé").length;
+  const rdvSpray = rdvs.filter(r=>r.cat_id==="spray"&&r.statut==="confirmé").length;
+
+  const getPromo = (nb) => {
+    if(nb===0) return null;
+    const cycle = nb % 10;
+    if(cycle === 0) return {remise:10, msg:`🎁 Félicitations ! -10€ sur votre prochain RDV`};
+    if(cycle === 5) return {remise:5, msg:`🎁 Bravo ! -5€ sur votre prochain RDV`};
+    return null;
+  };
+
+  const getProgress = (nb) => {
+    const cycle = nb % 10;
+    const next = cycle < 5 ? 5 - cycle : 10 - cycle;
+    const nextRemise = cycle < 5 ? 5 : 10;
+    return {next, nextRemise, cycle};
+  };
+
+  const renderSection = (label, nb, color) => {
+    const promo = getPromo(nb);
+    const {next, nextRemise, cycle} = getProgress(nb);
+    const pct = (cycle / (cycle < 5 ? 5 : 10)) * 100;
+
+    return (
+      <div style={{background:C.surface,border:`1px solid ${promo?C.accent:C.border}`,borderRadius:16,padding:"18px 20px",marginBottom:12}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div style={{fontSize:14,fontWeight:600,color:C.text}}>{label}</div>
+          <div style={{fontSize:13,color:C.textLight}}>{nb} RDV</div>
+        </div>
+        {promo ? (
+          <div style={{background:C.accentLight,border:`1px solid ${C.accent}`,borderRadius:10,padding:"12px 14px",fontSize:13,color:C.accentDark,fontWeight:600,marginBottom:10}}>
+            {promo.msg}
+            <div style={{fontSize:11,color:C.textMid,fontWeight:400,marginTop:4}}>Mentionnez-le lors de votre prochain RDV 😊</div>
+          </div>
+        ) : (
+          <div style={{marginBottom:10}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.textLight,marginBottom:6}}>
+              <span>Prochain avantage dans {next} RDV</span>
+              <span>-{nextRemise}€</span>
+            </div>
+            <div style={{height:4,background:C.surfaceAlt,borderRadius:4}}>
+              <div style={{height:"100%",width:`${pct}%`,background:color,borderRadius:4,transition:"width .8s ease"}}/>
+            </div>
+          </div>
+        )}
+        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+          {Array(10).fill(null).map((_,i)=>(
+            <div key={i} style={{width:22,height:22,borderRadius:"50%",background:i<(nb%10===0&&nb>0?10:nb%10)?color:C.surfaceAlt,border:`1px solid ${i<(nb%10===0&&nb>0?10:nb%10)?color:C.border}`,transition:"all .3s"}}/>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  if(rdvOngles===0&&rdvSpray===0) return (
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:"18px 20px",marginBottom:16}}>
+      <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:6}}>Programme fidélité 🎁</div>
+      <div style={{fontSize:12,color:C.textLight,lineHeight:1.7}}>Réservez vos premiers RDV ongles ou spray tan pour cumuler des avantages !</div>
+      <div style={{fontSize:11,color:C.textLight,marginTop:8}}>-5€ tous les 5 RDV · -10€ tous les 10 RDV</div>
+    </div>
+  );
+
+  return (
+    <div style={{marginBottom:16}}>
+      <div style={{fontSize:10,letterSpacing:2.5,textTransform:"uppercase",color:C.textLight,marginBottom:12,fontWeight:500}}>Programme fidélité</div>
+      {rdvOngles>0&&renderSection("Prothésie Ongulaire", rdvOngles, "#c4a882")}
+      {rdvSpray>0&&renderSection("Spray Tan", rdvSpray, "#c49060")}
+    </div>
+  );
+}
+
 // ── ROOT ──────────────────────────────────────────────────────────────────────
 export default function App() {
   const [session,setSession]=useState(null);
@@ -1162,7 +1238,14 @@ export default function App() {
   const handleBooked=(rdv)=>{setAllRdvs(p=>[...p,rdv]);setClientRdvs(p=>[...p,rdv]);setTab("mesrdvs");showToast("Rendez-vous confirmé !");};
   const handleLogout=async()=>{if(session?.token)await api.signOut(session.token);localStorage.removeItem("nlb_sess");setSession(null);setClientRdvs([]);showToast("Déconnecté·e");};
 
-  const laserUnlocked=session?(laserAccess[session.user?.id]||false):false;
+  const [supaLaserAccess, setSupaLaserAccess] = useState(false);
+  useEffect(()=>{
+    if(!session) return;
+    api.get("profiles",`id=eq.${session.user.id}&select=laser_access`).then(d=>{
+      if(Array.isArray(d)&&d[0]) setSupaLaserAccess(d[0].laser_access||false);
+    });
+  },[session]);
+  const laserUnlocked=supaLaserAccess;
 
   if(view==="admin") return <div style={{minHeight:"100vh",background:C.bg}}><GS/>{toast&&<Toast {...toast}/>}<AdminView onExit={()=>setView("main")}/></div>;
 
@@ -1173,7 +1256,7 @@ export default function App() {
       {showLoginModal&&<AuthModal onAuth={(s)=>{handleAuth(s);setShowLoginModal(false);setTab("compte");}} onClose={()=>setShowLoginModal(false)} booking={null}/>}
       <div style={{maxWidth:520,margin:"0 auto",padding:"0 20px 100px"}}>
         <div style={{paddingTop:48,paddingBottom:36}}>
-          <div style={{fontSize:9,letterSpacing:3,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>Institut de beauté · Toulouse</div>
+          <div style={{fontSize:9,letterSpacing:3,textTransform:"uppercase",color:"#c0b0d8",marginBottom:12,fontSize:11}}>Institut de beauté · Toulouse — Cartoucherie</div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <h1 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:42,fontWeight:300,color:C.text,lineHeight:1,letterSpacing:6,textTransform:"uppercase"}}>Neylika</h1>
             {session?(
@@ -1182,10 +1265,18 @@ export default function App() {
                 <button onClick={handleLogout} style={{fontSize:11,color:C.textLight,background:"none",border:"none",cursor:"pointer",marginTop:2}}>Déconnexion</button>
               </div>
             ):(
-              <button onClick={()=>setShowLoginModal(true)} style={{fontSize:12,color:C.textMid,background:"none",border:`1px solid ${C.border}`,borderRadius:20,padding:"6px 14px",cursor:"pointer"}}>Se connecter</button>
+              <button onClick={()=>setShowLoginModal(true)} style={{fontSize:13,color:"#d4c4e8",background:"none",border:`1px solid ${C.border}`,borderRadius:20,padding:"8px 16px",cursor:"pointer"}}>Se connecter</button>
             )}
           </div>
-          <p style={{fontSize:12,color:C.textLight,marginTop:10,lineHeight:1.7,letterSpacing:1,fontStyle:"italic"}}>Ton espace beauté à domicile · Ongles · Laser · Bronzage</p>
+          <p style={{fontSize:15,color:"#d4c4ec",marginTop:10,lineHeight:1.7,letterSpacing:.5,fontStyle:"italic"}}>Ton espace beauté à domicile · Ongles · Laser · Bronzage</p>
+          <a href="https://www.instagram.com/neylika31/" target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,marginTop:12,textDecoration:"none"}}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="2" y="2" width="20" height="20" rx="6" stroke="#c9a0c0" strokeWidth="1.5"/>
+              <circle cx="12" cy="12" r="4" stroke="#c9a0c0" strokeWidth="1.5"/>
+              <circle cx="17.5" cy="6.5" r="1" fill="#c9a0c0"/>
+            </svg>
+            <span style={{fontSize:13,color:C.accent,letterSpacing:.5}}>@neylika31</span>
+          </a>
         </div>
 
         {tab==="reserver"&&<ReservationView session={session} allRdvs={allRdvs} onBooked={handleBooked} laserUnlocked={laserUnlocked} onAuth={handleAuth}/>}
@@ -1210,6 +1301,7 @@ export default function App() {
                   ))}
                 </div>
                 {laserUnlocked&&<div style={{padding:"12px 16px",background:C.locked+"44",border:`1px solid ${C.locked}`,borderRadius:12,marginBottom:16,fontSize:13,color:C.lockedText}}>✓ Accès laser activé — vous pouvez réserver vos séances.</div>}
+                <FideliteCard rdvs={clientRdvs}/>
                 <GBtn onClick={handleLogout}>Se déconnecter</GBtn>
               </>
             )}
