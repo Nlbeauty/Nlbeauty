@@ -930,20 +930,52 @@ function AdminView({onExit}) {
   const [loading,setLoading]=useState(false),[tab,setTab]=useState("today");
   const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
 
-  const load=async()=>{
+  // ✨ MODIFIÉ : on lit aussi le vrai état laser_access depuis Supabase
+  const load = async () => {
     setLoading(true);
-    const [d,p]=await Promise.all([api.get("rdvs","select=*&order=date.asc,slot.asc"),api.get("profiles","select=*")]);
-    if(Array.isArray(d))setRdvs(d);
-    if(Array.isArray(p))setProfs(p);
+    const [d, p] = await Promise.all([
+      api.get("rdvs", "select=*&order=date.asc,slot.asc"),
+      api.get("profiles", "select=*"),
+    ]);
+    if (Array.isArray(d)) setRdvs(d);
+    if (Array.isArray(p)) {
+      setProfs(p);
+      // Synchroniser l'état laserAccess avec ce qu'il y a vraiment dans Supabase
+      const accessMap = {};
+      p.forEach(prof => { accessMap[prof.id] = prof.laser_access || false; });
+      setLaserAccess(accessMap);
+      localStorage.setItem("laser_access", JSON.stringify(accessMap));
+    }
     setLoading(false);
   };
 
-  const toggleLaser=async(uid)=>{
+  // ✨ MODIFIÉ : on passe par la fonction RPC sécurisée (contourne RLS)
+  const toggleLaser = async (uid) => {
     const newVal = !laserAccess[uid];
-    const updated={...laserAccess,[uid]:newVal};
+
+    const res = await fetch(`${SUPA_URL}/rest/v1/rpc/admin_set_laser_access`, {
+      method: "POST",
+      headers: {
+        "apikey": SUPA_KEY,
+        "Authorization": `Bearer ${SUPA_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        target_user_id: uid,
+        new_value: newVal,
+        admin_code: "2604",
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      alert("Erreur déblocage laser : " + errText);
+      return;
+    }
+
+    const updated = { ...laserAccess, [uid]: newVal };
     setLaserAccess(updated);
-    localStorage.setItem("laser_access",JSON.stringify(updated));
-    await api.patch("profiles",`id=eq.${uid}`,{laser_access:newVal});
+    localStorage.setItem("laser_access", JSON.stringify(updated));
   };
 
   const cancel=async(id)=>{
