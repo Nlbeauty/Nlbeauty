@@ -988,6 +988,14 @@ function AdminView({onExit}) {
       load();
     }
   },[]);
+  // Au chargement : si on a déjà une session valide, on déverrouille automatiquement
+  useEffect(()=>{
+    const session = getAdminSession();
+    if(session){
+      setIsUnlocked(true);
+      load();
+    }
+  },[]);
   const [rdvs,setRdvs]=useState([]),[profs,setProfs]=useState([]);
   const [loading,setLoading]=useState(false),[tab,setTab]=useState("today");
   const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
@@ -1133,6 +1141,7 @@ function AdminView({onExit}) {
             <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.text,letterSpacing:4,textTransform:"uppercase"}}>Neylika</div>
           </div>
           <button onClick={onExit} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.textMid,padding:"8px 14px",fontSize:12,cursor:"pointer"}}>Quitter</button>
+          <button onClick={()=>{adminLogout();setIsUnlocked(false);setAdminEmail("");setAdminPwd("");}} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.textMid,padding:"8px 14px",fontSize:12,cursor:"pointer",marginLeft:8}}>Déconnexion</button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:24}}>
           {[[confirmes.length,"RDV"],[confirmes.reduce((s,r)=>s+r.prix,0)+" €","CA"],[confirmes.reduce((s,r)=>s+r.acompte,0)+" €","Acomptes"]].map(([v,l],i)=>(
