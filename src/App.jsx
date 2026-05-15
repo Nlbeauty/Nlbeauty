@@ -120,9 +120,14 @@ const sendPush = async (title, message) => {
 const api = {
   h: { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
   ah: (t) => ({ "apikey": SUPA_KEY, "Authorization": `Bearer ${t}`, "Content-Type": "application/json", "Prefer": "return=representation" }),
-  async get(table, q="") { const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${q}`,{headers:this.h}); return r.json(); },
-  async post(table, body, token) { const h=token?this.ah(token):{...this.h,"Prefer":"return=representation"}; const r=await fetch(`${SUPA_URL}/rest/v1/${table}`,{method:"POST",headers:h,body:JSON.stringify(body)}); return r.json(); },
-  async patch(table, filter, body) { const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`,{method:"PATCH",headers:{...this.h,"Prefer":"return=representation"},body:JSON.stringify(body)}); return r.json(); },
+  // Headers auto : token admin si connectée, sinon clé anonyme
+  authHeaders() {
+    const s = getAdminSession();
+    return s ? this.ah(s.access_token) : this.h;
+  },
+  async get(table, q="") { const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${q}`,{headers:this.authHeaders()}); return r.json(); },
+  async post(table, body, token) { const h=token?this.ah(token):{...this.authHeaders(),"Prefer":"return=representation"}; const r=await fetch(`${SUPA_URL}/rest/v1/${table}`,{method:"POST",headers:h,body:JSON.stringify(body)}); return r.json(); },
+  async patch(table, filter, body) { const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`,{method:"PATCH",headers:{...this.authHeaders(),"Prefer":"return=representation"},body:JSON.stringify(body)}); return r.json(); },
   async signUp(email, password) { const r=await fetch(`${SUPA_URL}/auth/v1/signup`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({email,password})}); return r.json(); },
   async signIn(email, password) { const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({email,password})}); return r.json(); },
   async refreshToken(refresh_token) { const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=refresh_token`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({refresh_token})}); return r.json(); },
