@@ -3,6 +3,45 @@ import { useState, useEffect, useRef } from "react";
 const SUPA_URL = "https://xpackkiprznsrotsohce.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwYWNra2lwcnpuc3JvdHNvaGNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NTkzMTIsImV4cCI6MjA5MTIzNTMxMn0.BBZzEnIkHfGcrMPoRa8cMp3_KKrlFAnsg8lXQijC9dA";
 const SUPA_PUB = "sb_publishable_kwmh9aAwybdtGLZWA7Mqfg_PrsEEuGu";
+// ─── AUTH ADMIN SUPABASE ───────────────────────────────
+const AUTH_STORAGE_KEY = "neylika_admin_session";
+
+const adminLogin = async (email, password) => {
+  const res = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: {
+      "apikey": SUPA_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    return { ok: false, error: data.error_description || data.msg || "Identifiants incorrects" };
+  }
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data));
+  return { ok: true, session: data };
+};
+
+const adminLogout = () => {
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+};
+
+const getAdminSession = () => {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    // Vérifie que le token n'est pas expiré
+    if (session.expires_at && session.expires_at * 1000 < Date.now()) {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      return null;
+    }
+    return session;
+  } catch {
+    return null;
+  }
+};
 
 // ─── EMAILJS ──────────────────────────────────────────────────────────────────
 const EJS_SERVICE = "service_kavvgs8";
@@ -81,9 +120,14 @@ const sendPush = async (title, message) => {
 const api = {
   h: { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
   ah: (t) => ({ "apikey": SUPA_KEY, "Authorization": `Bearer ${t}`, "Content-Type": "application/json", "Prefer": "return=representation" }),
-  async get(table, q="") { const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${q}`,{headers:this.h}); return r.json(); },
-  async post(table, body, token) { const h=token?this.ah(token):{...this.h,"Prefer":"return=representation"}; const r=await fetch(`${SUPA_URL}/rest/v1/${table}`,{method:"POST",headers:h,body:JSON.stringify(body)}); return r.json(); },
-  async patch(table, filter, body) { const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`,{method:"PATCH",headers:{...this.h,"Prefer":"return=representation"},body:JSON.stringify(body)}); return r.json(); },
+  // Headers auto : token admin si connectée, sinon clé anonyme
+  authHeaders() {
+    const s = getAdminSession();
+    return s ? this.ah(s.access_token) : this.h;
+  },
+  async get(table, q="") { const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${q}`,{headers:this.authHeaders()}); return r.json(); },
+  async post(table, body, token) { const h=token?this.ah(token):{...this.authHeaders(),"Prefer":"return=representation"}; const r=await fetch(`${SUPA_URL}/rest/v1/${table}`,{method:"POST",headers:h,body:JSON.stringify(body)}); return r.json(); },
+  async patch(table, filter, body) { const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`,{method:"PATCH",headers:{...this.authHeaders(),"Prefer":"return=representation"},body:JSON.stringify(body)}); return r.json(); },
   async signUp(email, password) { const r=await fetch(`${SUPA_URL}/auth/v1/signup`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({email,password})}); return r.json(); },
   async signIn(email, password) { const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({email,password})}); return r.json(); },
   async refreshToken(refresh_token) { const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=refresh_token`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({refresh_token})}); return r.json(); },
@@ -939,6 +983,24 @@ function PlanningAdmin() {
 
 function AdminView({onExit}) {
   const [code,setCode]=useState(""),[isUnlocked,setIsUnlocked]=useState(false);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPwd, setAdminPwd] = useState("");
+  // Au chargement : si on a déjà une session valide, on déverrouille automatiquement
+  useEffect(()=>{
+    const session = getAdminSession();
+    if(session){
+      setIsUnlocked(true);
+      load();
+    }
+  },[]);
+  // Au chargement : si on a déjà une session valide, on déverrouille automatiquement
+  useEffect(()=>{
+    const session = getAdminSession();
+    if(session){
+      setIsUnlocked(true);
+      load();
+    }
+  },[]);
   const [rdvs,setRdvs]=useState([]),[profs,setProfs]=useState([]);
   const [loading,setLoading]=useState(false),[tab,setTab]=useState("today");
   const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
@@ -1004,15 +1066,41 @@ function AdminView({onExit}) {
   };
 
   if(!isUnlocked) return (
-    <div className="fu" style={{padding:"0 20px",maxWidth:360,margin:"0 auto",paddingTop:60}}>
-      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,color:C.text,marginBottom:8}}>Administration</div>
-      <div style={{marginBottom:12}}><Lbl>Code d'accès</Lbl><Inp value={code} onChange={e=>setCode(e.target.value)} type="password" placeholder="••••••••••"/></div>
-      <div style={{display:"flex",gap:10,marginTop:4}}>
-        <GBtn onClick={onExit}>Retour</GBtn>
-        <PBtn onClick={()=>{if(code==="2604"){setIsUnlocked(true);load();}else alert("Code incorrect");}}>Accéder</PBtn>
-      </div>
+  <div className="fu" style={{padding:"0 20px",maxWidth:360,margin:"0 auto",paddingTop:60}}>
+    <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,color:C.text,marginBottom:8}}>Administration</div>
+    <div style={{marginBottom:12}}>
+      <Lbl>Email</Lbl>
+      <Inp value={adminEmail} onChange={e=>setAdminEmail(e.target.value)} type="email" placeholder="ton@email.com" autoComplete="email" />
     </div>
-  );
+    <div style={{marginBottom:12}}>
+      <Lbl>Mot de passe</Lbl>
+      <Inp value={adminPwd} onChange={e=>setAdminPwd(e.target.value)} type="password" placeholder="••••••••" autoComplete="current-password" />
+    </div>
+    <div style={{display:"flex",gap:10,marginTop:4}}>
+      <GBtn onClick={onExit}>Retour</GBtn>
+      <PBtn onClick={async()=>{
+        // Backup temporaire : code 2604 fonctionne encore
+        if(adminPwd==="2604" && !adminEmail){
+          setIsUnlocked(true);
+          load();
+          return;
+        }
+        // Vraie connexion Supabase
+        if(!adminEmail || !adminPwd){
+          alert("Renseigne ton email et mot de passe");
+          return;
+        }
+        const result = await adminLogin(adminEmail, adminPwd);
+        if(result.ok){
+          setIsUnlocked(true);
+          load();
+        } else {
+          alert("Connexion impossible : " + result.error);
+        }
+      }}>Se connecter</PBtn>
+    </div>
+  </div>
+);
 
   const confirmes=rdvs.filter(r=>r.statut==="confirmé");
   const todayRdvs=rdvs.filter(r=>r.date===todayStr()&&r.statut!=="annulé").sort((a,b)=>a.slot.localeCompare(b.slot));
@@ -1058,6 +1146,7 @@ function AdminView({onExit}) {
             <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.text,letterSpacing:4,textTransform:"uppercase"}}>Neylika</div>
           </div>
           <button onClick={onExit} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.textMid,padding:"8px 14px",fontSize:12,cursor:"pointer"}}>Quitter</button>
+          <button onClick={()=>{adminLogout();setIsUnlocked(false);setAdminEmail("");setAdminPwd("");}} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.textMid,padding:"8px 14px",fontSize:12,cursor:"pointer",marginLeft:8}}>Déconnexion</button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:24}}>
           {[[confirmes.length,"RDV"],[confirmes.reduce((s,r)=>s+r.prix,0)+" €","CA"],[confirmes.reduce((s,r)=>s+r.acompte,0)+" €","Acomptes"]].map(([v,l],i)=>(
