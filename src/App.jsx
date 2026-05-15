@@ -3,6 +3,45 @@ import { useState, useEffect, useRef } from "react";
 const SUPA_URL = "https://xpackkiprznsrotsohce.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwYWNra2lwcnpuc3JvdHNvaGNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NTkzMTIsImV4cCI6MjA5MTIzNTMxMn0.BBZzEnIkHfGcrMPoRa8cMp3_KKrlFAnsg8lXQijC9dA";
 const SUPA_PUB = "sb_publishable_kwmh9aAwybdtGLZWA7Mqfg_PrsEEuGu";
+// ─── AUTH ADMIN SUPABASE ───────────────────────────────
+const AUTH_STORAGE_KEY = "neylika_admin_session";
+
+const adminLogin = async (email, password) => {
+  const res = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: {
+      "apikey": SUPA_KEY,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ email, password }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    return { ok: false, error: data.error_description || data.msg || "Identifiants incorrects" };
+  }
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data));
+  return { ok: true, session: data };
+};
+
+const adminLogout = () => {
+  localStorage.removeItem(AUTH_STORAGE_KEY);
+};
+
+const getAdminSession = () => {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    // Vérifie que le token n'est pas expiré
+    if (session.expires_at && session.expires_at * 1000 < Date.now()) {
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      return null;
+    }
+    return session;
+  } catch {
+    return null;
+  }
+};
 
 // ─── EMAILJS ──────────────────────────────────────────────────────────────────
 const EJS_SERVICE = "service_kavvgs8";
