@@ -978,6 +978,8 @@ function PlanningAdmin() {
 
 function AdminView({onExit}) {
   const [code,setCode]=useState(""),[isUnlocked,setIsUnlocked]=useState(false);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [adminPwd, setAdminPwd] = useState("");
   const [rdvs,setRdvs]=useState([]),[profs,setProfs]=useState([]);
   const [loading,setLoading]=useState(false),[tab,setTab]=useState("today");
   const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
@@ -1043,15 +1045,41 @@ function AdminView({onExit}) {
   };
 
   if(!isUnlocked) return (
-    <div className="fu" style={{padding:"0 20px",maxWidth:360,margin:"0 auto",paddingTop:60}}>
-      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,color:C.text,marginBottom:8}}>Administration</div>
-      <div style={{marginBottom:12}}><Lbl>Code d'accès</Lbl><Inp value={code} onChange={e=>setCode(e.target.value)} type="password" placeholder="••••••••••"/></div>
-      <div style={{display:"flex",gap:10,marginTop:4}}>
-        <GBtn onClick={onExit}>Retour</GBtn>
-        <PBtn onClick={()=>{if(code==="2604"){setIsUnlocked(true);load();}else alert("Code incorrect");}}>Accéder</PBtn>
-      </div>
+  <div className="fu" style={{padding:"0 20px",maxWidth:360,margin:"0 auto",paddingTop:60}}>
+    <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,color:C.text,marginBottom:8}}>Administration</div>
+    <div style={{marginBottom:12}}>
+      <Lbl>Email</Lbl>
+      <Inp value={adminEmail} onChange={e=>setAdminEmail(e.target.value)} type="email" placeholder="ton@email.com" autoComplete="email" />
     </div>
-  );
+    <div style={{marginBottom:12}}>
+      <Lbl>Mot de passe</Lbl>
+      <Inp value={adminPwd} onChange={e=>setAdminPwd(e.target.value)} type="password" placeholder="••••••••" autoComplete="current-password" />
+    </div>
+    <div style={{display:"flex",gap:10,marginTop:4}}>
+      <GBtn onClick={onExit}>Retour</GBtn>
+      <PBtn onClick={async()=>{
+        // Backup temporaire : code 2604 fonctionne encore
+        if(adminPwd==="2604" && !adminEmail){
+          setIsUnlocked(true);
+          load();
+          return;
+        }
+        // Vraie connexion Supabase
+        if(!adminEmail || !adminPwd){
+          alert("Renseigne ton email et mot de passe");
+          return;
+        }
+        const result = await adminLogin(adminEmail, adminPwd);
+        if(result.ok){
+          setIsUnlocked(true);
+          load();
+        } else {
+          alert("Connexion impossible : " + result.error);
+        }
+      }}>Se connecter</PBtn>
+    </div>
+  </div>
+);
 
   const confirmes=rdvs.filter(r=>r.statut==="confirmé");
   const todayRdvs=rdvs.filter(r=>r.date===todayStr()&&r.statut!=="annulé").sort((a,b)=>a.slot.localeCompare(b.slot));
