@@ -464,7 +464,7 @@ function PlanityDatePicker({selPresta,allRdvs,allSupaBlocked,selectedDate,select
   useEffect(()=>{
     if(selectedDate) return;
     const d = new Date(minDate);
-    for(let i=0;i<60;i++){
+    for(let i=0;i<49;i++){
       const s = new Date(d.getTime()+i*86400000).toISOString().split("T")[0];
       if(getAvailSlots(s).length>0){
         const [y,m] = s.split("-");
@@ -627,7 +627,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
     const unavail=[];
     let first=null;
     const today=new Date();
-    for(let i=0;i<60;i++){
+    for(let i=0;i<49;i++){
       const d=new Date(today);
       d.setDate(today.getDate()+i);
       const s=d.toISOString().split("T")[0];
