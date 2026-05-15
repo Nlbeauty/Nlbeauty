@@ -65,7 +65,7 @@ const sendCancelEmail = async (rdv) => {
   } catch(e) { console.log("Cancel email error:", e); }
 };
 
-const NTFY_TOPIC = "neylika-rdv-2604";
+const NTFY_TOPIC = "neylika-rdv-q8mk3xfp7vwn";
 
 const sendPush = async (title, message) => {
   try {
