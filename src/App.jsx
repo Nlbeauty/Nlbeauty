@@ -980,6 +980,14 @@ function AdminView({onExit}) {
   const [code,setCode]=useState(""),[isUnlocked,setIsUnlocked]=useState(false);
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPwd, setAdminPwd] = useState("");
+  // Au chargement : si on a déjà une session valide, on déverrouille automatiquement
+  useEffect(()=>{
+    const session = getAdminSession();
+    if(session){
+      setIsUnlocked(true);
+      load();
+    }
+  },[]);
   const [rdvs,setRdvs]=useState([]),[profs,setProfs]=useState([]);
   const [loading,setLoading]=useState(false),[tab,setTab]=useState("today");
   const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
