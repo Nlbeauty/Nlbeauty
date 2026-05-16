@@ -1569,7 +1569,19 @@ export default function App() {
   useEffect(()=>{
     if(!session)return;
     setLoadingRdvs(true);
-    api.get("rdvs",`select=*&user_id=eq.${session.user.id}&order=date.asc`).then(d=>{if(Array.isArray(d))setClientRdvs(d);setLoadingRdvs(false);});
+    fetch(`${SUPA_URL}/rest/v1/rdvs?select=*&user_id=eq.${session.user.id}&order=date.asc`,{
+      headers:{
+        "apikey":SUPA_KEY,
+        "Authorization":`Bearer ${session.token}`,
+        "Content-Type":"application/json",
+      }
+    }).then(r=>r.json()).then(d=>{
+      if(Array.isArray(d))setClientRdvs(d);
+      setLoadingRdvs(false);
+    }).catch(e=>{
+      console.log("Erreur chargement RDV cliente:",e);
+      setLoadingRdvs(false);
+    });
   },[session]);
 
   const handleAuth=(s)=>{setSession(s);localStorage.setItem("nlb_sess",JSON.stringify(s));showToast(`Bienvenue ${s.profile?.prenom||""} !`);};
