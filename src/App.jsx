@@ -997,7 +997,211 @@ function PlanningAdmin() {
     </div>
   );
 }
+// ── ADMIN : CRÉATION D'UN RDV ────────────────────────────────────────────────
+function AdminCreateRdvView({allRdvs, profs, onCreated}) {
+  const ALL_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
 
+  const [mode, setMode] = useState("existing"); // "existing" ou "new"
+  // Cliente existante
+  const [selectedClientId, setSelectedClientId] = useState("");
+  // Cliente nouvelle (saisie libre)
+  const [newPrenom, setNewPrenom] = useState("");
+  const [newNom, setNewNom] = useState("");
+  const [newTel, setNewTel] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  // Prestation
+  const [svcId, setSvcId] = useState("");
+  const [subId, setSubId] = useState("");
+  const [prestaId, setPrestaId] = useState("");
+  // Date / créneau
+  const [date, setDate] = useState(todayStr());
+  const [slot, setSlot] = useState("");
+  // États
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState(null); // {type:"ok"|"err", text:""}
+
+  const svc = svcId ? SERVICES.find(s=>s.id===svcId) : null;
+  const sub = svc && subId ? svc.subcats.find(s=>s.id===subId) : null;
+  const presta = sub && prestaId ? sub.prestations.find(p=>p.id===prestaId) : null;
+
+  // Calcule les créneaux pris ce jour-là (par d'autres RDV)
+  const takenSlots = (() => {
+    const blocked = new Set();
+    allRdvs.filter(r=>r.date===date && r.statut!=="annulé").forEach(r=>{
+      const idx = ALL_SLOTS.indexOf(r.slot);
+      if(idx===-1) return;
+      let mins = 0;
+      for(let i=idx; i<ALL_SLOTS.length && mins<(r.duree||30); i++){
+        blocked.add(ALL_SLOTS[i]);
+        mins += 30;
+      }
+    });
+    return blocked;
+  })();
+
+  // Vérifie si le slot choisi laisse assez de place pour la durée de la presta
+  const slotFitsDuration = (s) => {
+    if(!presta) return true;
+    const idx = ALL_SLOTS.indexOf(s);
+    if(idx===-1) return false;
+    const slotsNeeded = Math.ceil((presta.duree||30)/30);
+    for(let i=0; i<slotsNeeded; i++){
+      const checkSlot = ALL_SLOTS[idx+i];
+      if(!checkSlot) return false;
+      if(takenSlots.has(checkSlot)) return false;
+    }
+    return true;
+  };
+
+  const handleCreate = async () => {
+    setMsg(null);
+    if(!presta){ setMsg({type:"err", text:"Choisis une prestation."}); return; }
+    if(!date || !slot){ setMsg({type:"err", text:"Choisis une date et un créneau."}); return; }
+    if(!slotFitsDuration(slot)){ setMsg({type:"err", text:"Ce créneau chevauche un autre RDV."}); return; }
+
+    let client_prenom, client_nom, client_tel, client_email, user_id;
+    if(mode==="existing"){
+      if(!selectedClientId){ setMsg({type:"err", text:"Choisis une cliente."}); return; }
+      const c = profs.find(p=>p.id===selectedClientId);
+      if(!c){ setMsg({type:"err", text:"Cliente introuvable."}); return; }
+      client_prenom = c.prenom; client_nom = c.nom; client_tel = c.tel;
+      client_email = c.email || ""; user_id = c.id;
+    } else {
+      if(!newPrenom||!newNom||!newTel){ setMsg({type:"err", text:"Prénom, nom et téléphone requis."}); return; }
+      client_prenom = newPrenom; client_nom = newNom; client_tel = newTel;
+      client_email = newEmail || ""; user_id = null;
+    }
+
+    setSaving(true);
+    try {
+      const rdv = {
+        user_id, cat_id: svcId, service: svc.label,
+        prestation: presta.nom, duree: presta.duree,
+        prix: presta.prix || 0, acompte: presta.acompte || 0,
+        date, slot,
+        client_prenom, client_nom, client_tel, client_email,
+        statut: "confirmé",
+      };
+      const res = await api.post("rdvs", rdv);
+      const saved = Array.isArray(res) ? res[0] : res;
+      if(!saved || saved.error){
+        setMsg({type:"err", text:"Erreur insertion : "+(saved?.message||"inconnue")});
+        setSaving(false);
+        return;
+      }
+      // Email auto à la cliente (si email fourni)
+      if(client_email) sendEmails(rdv, client_email);
+      sendPush(`📅 RDV créé par admin — ${client_prenom} ${client_nom}`, `${rdv.prestation} · ${rdv.date} à ${rdv.slot}`);
+      setMsg({type:"ok", text:`RDV créé pour ${client_prenom} ${client_nom} le ${fmtLong(date)} à ${slot}${client_email?" — email envoyé":""}.`});
+      if(onCreated) onCreated(saved);
+      // Reset partiel
+      setSlot(""); setPrestaId(""); setSubId(""); setSvcId("");
+      setSelectedClientId(""); setNewPrenom(""); setNewNom(""); setNewTel(""); setNewEmail("");
+    } catch(e){
+      setMsg({type:"err", text:"Erreur réseau : "+e.message});
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div>
+      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:18}}>Créer un rendez-vous</div>
+
+      {/* Mode cliente */}
+      <Lbl>Cliente</Lbl>
+      <div style={{display:"flex",background:C.surfaceAlt,borderRadius:10,padding:4,marginBottom:16}}>
+        {[["existing","Cliente existante"],["new","Nouvelle cliente"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setMode(id)} style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:mode===id?C.surface:"transparent",color:mode===id?C.text:C.textMid,fontSize:13,fontWeight:mode===id?600:400,cursor:"pointer"}}>{label}</button>
+        ))}
+      </div>
+
+      {mode==="existing" ? (
+        <div style={{marginBottom:18}}>
+          <select value={selectedClientId} onChange={e=>setSelectedClientId(e.target.value)} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14}}>
+            <option value="">— Choisir une cliente —</option>
+            {[...profs].sort((a,b)=>(a.prenom||"").localeCompare(b.prenom||"")).map(p=>(
+              <option key={p.id} value={p.id}>{p.prenom} {p.nom} — {p.tel}</option>
+            ))}
+          </select>
+        </div>
+      ) : (
+        <div style={{marginBottom:18}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <Inp value={newPrenom} onChange={e=>setNewPrenom(e.target.value)} placeholder="Prénom"/>
+            <Inp value={newNom} onChange={e=>setNewNom(e.target.value)} placeholder="Nom"/>
+          </div>
+          <Inp value={newTel} onChange={e=>setNewTel(e.target.value)} placeholder="Téléphone" type="tel" style={{marginBottom:10}}/>
+          <Inp value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder="Email (optionnel, pour confirmation)" type="email"/>
+        </div>
+      )}
+
+      {/* Prestation */}
+      <Lbl>Service</Lbl>
+      <select value={svcId} onChange={e=>{setSvcId(e.target.value);setSubId("");setPrestaId("");}} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14,marginBottom:12}}>
+        <option value="">— Choisir un service —</option>
+        {SERVICES.map(s=>(<option key={s.id} value={s.id}>{s.label}</option>))}
+      </select>
+
+      {svc && (
+        <select value={subId} onChange={e=>{setSubId(e.target.value);setPrestaId("");}} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14,marginBottom:12}}>
+          <option value="">— Choisir une sous-catégorie —</option>
+          {svc.subcats.map(s=>(<option key={s.id} value={s.id}>{s.label}</option>))}
+        </select>
+      )}
+
+      {sub && (
+        <select value={prestaId} onChange={e=>setPrestaId(e.target.value)} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14,marginBottom:18}}>
+          <option value="">— Choisir une prestation —</option>
+          {sub.prestations.map(p=>(<option key={p.id} value={p.id}>{p.nom} — {p.duree}min — {p.prix?p.prix+"€":"Sur devis"}</option>))}
+        </select>
+      )}
+
+      {/* Date */}
+      <Lbl>Date</Lbl>
+      <Inp type="date" value={date} onChange={e=>{setDate(e.target.value);setSlot("");}} style={{marginBottom:16}}/>
+
+      {/* Créneaux */}
+      {presta && (
+        <>
+          <Lbl>Créneau (durée {presta.duree} min)</Lbl>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:18}}>
+            {ALL_SLOTS.map(s=>{
+              const isTaken = takenSlots.has(s);
+              const fits = !isTaken && slotFitsDuration(s);
+              const active = slot===s;
+              const disabled = isTaken || !fits;
+              return (
+                <div key={s} onClick={()=>!disabled && setSlot(s)} style={{
+                  padding:"11px 4px", textAlign:"center", borderRadius:10,
+                  border:`1.5px solid ${active?C.accent:disabled?C.border:C.border}`,
+                  background: active?C.accent:disabled?"#2a1010":C.surface,
+                  color: active?"#fff":disabled?"#7a4040":C.textMid,
+                  fontSize:13, fontWeight:active?700:400,
+                  cursor:disabled?"default":"pointer", transition:"all .15s",
+                  textDecoration:isTaken?"line-through":"none",
+                }}>{s}</div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Message */}
+      {msg && (
+        <div style={{padding:"12px 14px",borderRadius:10,marginBottom:14,fontSize:13,
+          background: msg.type==="ok"?"#0f2a18":"#2a1010",
+          color: msg.type==="ok"?"#8dd0a0":"#f08080",
+          border: `1px solid ${msg.type==="ok"?"#1f4028":"#5a2020"}`,
+        }}>{msg.text}</div>
+      )}
+
+      {/* Bouton créer */}
+      <PBtn onClick={handleCreate} disabled={saving}>
+        {saving ? "Création…" : "Créer le rendez-vous"}
+      </PBtn>
+    </div>
+  );
+}
 function AdminView({onExit}) {
   const [code,setCode]=useState(""),[isUnlocked,setIsUnlocked]=useState(false);
   const [adminEmail, setAdminEmail] = useState("");
@@ -1171,7 +1375,7 @@ function AdminView({onExit}) {
       </div>
 
       <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,marginBottom:24,overflowX:"auto"}}>
-        {[["today","Aujourd'hui"],["upcoming","À venir"],["all","Tous"],["planning","Planning"],["laser","Laser 🔒"]].map(([id,label])=>(
+        {[["today","Aujourd'hui"],["upcoming","À venir"],["all","Tous"],["create","+ Créer RDV"],["planning","Planning"],["laser","Laser 🔒"]].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)} style={{flexShrink:0,padding:"11px 10px",background:"none",border:"none",borderBottom:`2px solid ${tab===id?C.accent:"transparent"}`,color:tab===id?C.accentDark:C.textLight,fontSize:11,fontWeight:tab===id?600:400,marginBottom:-1,letterSpacing:.3,cursor:"pointer"}}>{label}</button>
         ))}
       </div>
@@ -1205,6 +1409,13 @@ function AdminView({onExit}) {
               </div>
             ))}
         </div>
+      )}
+      {!loading&&tab==="create"&&(
+        <AdminCreateRdvView
+          allRdvs={rdvs}
+          profs={profs}
+          onCreated={(saved)=>{ setRdvs(p=>[...p, saved]); setTab("today"); }}
+        />
       )}
       {!loading&&tab==="planning"&&(
         <PlanningAdmin/>
