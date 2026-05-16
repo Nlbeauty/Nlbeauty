@@ -1158,8 +1158,8 @@ function AdminCreateRdvView({allRdvs, profs, onCreated}) {
 
       {/* Date */}
       <Lbl>Date</Lbl>
-      <Inp type="date" value={date} onChange={e=>{setDate(e.target.value);setSlot("");}} style={{marginBottom:16}}/>
-
+      <Inp type="date" value={date} min={todayStr()} onChange={e=>{setDate(e.target.value);setSlot("");}} style={{marginBottom:16}}/>
+      
       {/* Créneaux */}
       {presta && (
         <>
