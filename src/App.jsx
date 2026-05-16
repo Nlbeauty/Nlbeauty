@@ -487,8 +487,7 @@ function PlanityDatePicker({selPresta,allRdvs,allSupaBlocked,selectedDate,select
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
           <button onClick={()=>mo===0?(setMo(11),setYr(yr-1)):setMo(mo-1)} style={{background:"none",border:"none",color:C.textLight,fontSize:22,cursor:"pointer",padding:"0 8px"}}>‹</button>
           <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:17,color:C.text,letterSpacing:.5}}>{MONTHS_F[mo]} {yr}</span>
-          <button onClick={()=>mo===11?(setMo(0),setYr(yr+1)):setMo(mo+1)} style={{background:"none",border:"none",color:C.textLight,fontSize:22,cursor:"pointer",padding:"0 8px"}}>›</button>
-        </div>
+          <button onClick={()=>{const maxD=new Date();maxD.setDate(maxD.getDate()+49);const nM=mo===11?0:mo+1;const nY=mo===11?yr+1:yr;if(new Date(nY,nM,1)>maxD)return;setMo(nM);setYr(nY);}} style={{background:"none",border:"none",...}}>
         {/* Jours semaine */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:8}}>
           {DAYS_S.map(d=><div key={d} style={{textAlign:"center",fontSize:10,color:C.textLight,fontWeight:500,letterSpacing:.8,textTransform:"uppercase",paddingBottom:8}}>{d}</div>)}
@@ -621,7 +620,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
     return false;
   };
 
-  // Calculer les jours indisponibles et le premier dispo sur 60 jours
+  // Calculer les jours indisponibles et le premier dispo sur 49 jours
   const {unavailableDates, firstAvailable} = (() => {
     if(!selPresta) return {unavailableDates:[], firstAvailable:null};
     const unavail=[];
