@@ -1079,12 +1079,7 @@ function AdminView({onExit}) {
     <div style={{display:"flex",gap:10,marginTop:4}}>
       <GBtn onClick={onExit}>Retour</GBtn>
       <PBtn onClick={async()=>{
-        // Backup temporaire : code 2604 fonctionne encore
-        if(adminPwd==="2604" && !adminEmail){
-          setIsUnlocked(true);
-          load();
-          return;
-        }
+     
         // Vraie connexion Supabase
         if(!adminEmail || !adminPwd){
           alert("Renseigne ton email et mot de passe");
