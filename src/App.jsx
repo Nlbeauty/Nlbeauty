@@ -701,7 +701,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
       const saved = Array.isArray(res) ? res[0] : res;
       // Envoyer les emails et notification push
       sendEmails(rdv, sess.user.email);
-      sendPush(`Nouveau RDV — ${rdv.client_prenom} ${rdv.client_nom}`, `${rdv.prestation} · ${rdv.date} à ${rdv.slot}`);
+      sendPush(`Nouveau RDV — ${rdv.client_prenom} ${rdv.client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`); · ${rdv.date} à ${rdv.slot}`);
       if(saved){
         setDone(saved);
         onBooked(saved);
@@ -877,7 +877,7 @@ function MesRdvsView({rdvs,loading}) {
     if(!confirm("Annuler ce rendez-vous ?")) return;
     await api.patch("rdvs",`id=eq.${r.id}`,{statut:"annulé"});
     await sendCancelEmail(r);
-    sendPush(`❌ Annulation — ${r.client_prenom} ${r.client_nom}`, `${r.prestation} · ${r.date} à ${r.slot}`);
+    sendPush(`❌ Annulation — ${r.client_prenom} ${r.client_nom}`, `${r.prestation} · ${fmtLong(r.date)} à ${r.slot}`);
     window.location.reload();
   };
   const Card=({r})=>(
@@ -1091,7 +1091,7 @@ function AdminCreateRdvView({allRdvs, profs, onCreated}) {
       }
       // Email auto à la cliente (si email fourni)
       if(client_email) sendEmails(rdv, client_email);
-      sendPush(`📅 RDV créé par admin — ${client_prenom} ${client_nom}`, `${rdv.prestation} · ${rdv.date} à ${rdv.slot}`);
+      sendPush(`📅 RDV créé par admin — ${client_prenom} ${client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`);
       setMsg({type:"ok", text:`RDV créé pour ${client_prenom} ${client_nom} le ${fmtLong(date)} à ${slot}${client_email?" — email envoyé":""}.`});
       if(onCreated) onCreated(saved);
       // Reset partiel
@@ -1282,7 +1282,7 @@ function AdminView({onExit}) {
     const rdvAnn = rdvs.find(r=>r.id===id);
     if(rdvAnn) {
       sendCancelEmail(rdvAnn);
-      sendPush(`❌ Annulation — ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`, `${rdvAnn.prestation} · ${rdvAnn.date} à ${rdvAnn.slot}`);
+      sendPush(`❌ Annulation — ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`, `${rdvAnn.prestation} · ${fmtLong(rdvAnn.date)} à ${rdvAnn.slot}`);
     }
   };
 
