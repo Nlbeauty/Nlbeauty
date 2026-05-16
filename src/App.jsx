@@ -481,14 +481,31 @@ function PlanityDatePicker({selPresta,allRdvs,allSupaBlocked,selectedDate,select
 
   return (
     <div>
-      {/* Calendrier */}
+     {/* Calendrier */}
       <div style={{background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"20px 18px",marginBottom:16}}>
-        {/* Nav mois */}
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
-          <button onClick={()=>mo===0?(setMo(11),setYr(yr-1)):setMo(mo-1)} style={{background:"none",border:"none",color:C.textLight,fontSize:22,cursor:"pointer",padding:"0 8px"}}>‹</button>
-          <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:17,color:C.text,letterSpacing:.5}}>{MONTHS_F[mo]} {yr}</span>
-          <button onClick={()=>mo===11?(setMo(0),setYr(yr+1)):setMo(mo+1)} style={{background:"none",border:"none",color:C.textLight,fontSize:22,cursor:"pointer",padding:"0 8px"}}>›</button>
-        </div>
+        {/* Nav mois — limité à 49 jours côté cliente */}
+        {(() => {
+          const maxDate = new Date(today.getTime() + 49*24*60*60*1000);
+          const maxYr = maxDate.getFullYear();
+          const maxMo = maxDate.getMonth();
+          const nextDisabled = (yr > maxYr) || (yr === maxYr && mo >= maxMo);
+          const prevDisabled = (yr < today.getFullYear()) || (yr === today.getFullYear() && mo <= today.getMonth());
+          return (
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+              <button
+                onClick={()=>{ if(prevDisabled) return; mo===0?(setMo(11),setYr(yr-1)):setMo(mo-1); }}
+                disabled={prevDisabled}
+                style={{background:"none",border:"none",color:prevDisabled?C.borderLight:C.textLight,fontSize:22,cursor:prevDisabled?"default":"pointer",padding:"0 8px",opacity:prevDisabled?.3:1}}
+              >‹</button>
+              <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:17,color:C.text,letterSpacing:.5}}>{MONTHS_F[mo]} {yr}</span>
+              <button
+                onClick={()=>{ if(nextDisabled) return; mo===11?(setMo(0),setYr(yr+1)):setMo(mo+1); }}
+                disabled={nextDisabled}
+                style={{background:"none",border:"none",color:nextDisabled?C.borderLight:C.textLight,fontSize:22,cursor:nextDisabled?"default":"pointer",padding:"0 8px",opacity:nextDisabled?.3:1}}
+              >›</button>
+            </div>
+          );
+        })()}
         {/* Jours semaine */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:8}}>
           {DAYS_S.map(d=><div key={d} style={{textAlign:"center",fontSize:10,color:C.textLight,fontWeight:500,letterSpacing:.8,textTransform:"uppercase",paddingBottom:8}}>{d}</div>)}
