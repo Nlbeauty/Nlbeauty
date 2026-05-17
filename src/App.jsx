@@ -116,6 +116,28 @@ const sendPush = async (title, message) => {
     });
   } catch(e) { console.log("Push error:", e); }
 };
+ // ─── FIDÉLITÉ : détecter si un RDV déclenche un palier promo ──────────────
+// Compte les RDV ongles ou spray confirmés (passés + à venir, y compris le nouveau)
+// et retourne {remise, msg, nb} si on atteint un palier, sinon null
+const checkFidelitePromo = (allRdvs, newRdv) => {
+  if(newRdv.cat_id !== "ongles" && newRdv.cat_id !== "spray") return null;
+  if(newRdv.statut !== "confirmé") return null;
+  // Compter tous les RDV de cette cat (confirmés), y compris le nouveau
+  const sameClient = (r) => {
+    if(newRdv.user_id) return r.user_id === newRdv.user_id;
+    return r.client_tel === newRdv.client_tel; // fallback pour les RDV créés admin sans user_id
+  };
+  const existing = allRdvs.filter(r =>
+    r.cat_id === newRdv.cat_id &&
+    r.statut === "confirmé" &&
+    sameClient(r)
+  ).length;
+  const nb = existing + 1; // +1 pour le nouveau RDV qu'on est en train de créer
+  const cycle = nb % 10;
+  if(cycle === 0) return {remise:10, msg:`🎁 PROMO -10€ à appliquer (${nb}e RDV ${newRdv.cat_id})`, nb};
+  if(cycle === 5) return {remise:5, msg:`🎁 PROMO -5€ à appliquer (${nb}e RDV ${newRdv.cat_id})`, nb};
+  return null;
+};
 
 const api = {
   h: { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
@@ -701,8 +723,10 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
       const saved = Array.isArray(res) ? res[0] : res;
       // Envoyer les emails et notification push
       sendEmails(rdv, sess.user.email);
-      sendPush(`Nouveau RDV — ${rdv.client_prenom} ${rdv.client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`); · ${rdv.date} à ${rdv.slot}`);
-      if(saved){
+      sendPush(`Nouveau RDV — ${rdv.client_prenom} ${rdv.client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`);
+      // Fidélité : si palier atteint, notif promo en plus
+      const promoFid = checkFidelitePromo(allRdvs, rdv);
+      if(promoFid) sendPush(`🎁 FIDÉLITÉ — ${rdv.client_prenom} ${rdv.client_nom}`, promoFid.msg);
         setDone(saved);
         onBooked(saved);
         sc(doneRef);
@@ -1092,6 +1116,9 @@ function AdminCreateRdvView({allRdvs, profs, onCreated}) {
       // Email auto à la cliente (si email fourni)
       if(client_email) sendEmails(rdv, client_email);
       sendPush(`📅 RDV créé par admin — ${client_prenom} ${client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`);
+      // Fidélité : si palier atteint, notif promo en plus
+      const promoFidAdmin = checkFidelitePromo(allRdvs, rdv);
+      if(promoFidAdmin) sendPush(`🎁 FIDÉLITÉ — ${client_prenom} ${client_nom}`, promoFidAdmin.msg);
       setMsg({type:"ok", text:`RDV créé pour ${client_prenom} ${client_nom} le ${fmtLong(date)} à ${slot}${client_email?" — email envoyé":""}.`});
       if(onCreated) onCreated(saved);
       // Reset partiel
@@ -1324,7 +1351,25 @@ function AdminView({onExit}) {
   const groupByDate=list=>{const g={};list.forEach(r=>{if(!g[r.date])g[r.date]=[];g[r.date].push(r);});return g;};
   const svcColor=(catId)=>SERVICES.find(s=>s.id===catId)?.color||C.accent;
 
-  const Row=({r})=>(
+  // Calcule si un RDV déclenche un palier de fidélité (pour le badge admin)
+  const getPromoFor = (r) => {
+    if(r.cat_id !== "ongles" && r.cat_id !== "spray") return null;
+    if(r.statut !== "confirmé") return null;
+    const sameClient = (x) => r.user_id ? x.user_id === r.user_id : x.client_tel === r.client_tel;
+    // On compte tous les RDV confirmés de cette cat pour ce client jusqu'à CE RDV inclus
+    // Ordre chronologique : date + slot
+    const allSame = rdvs
+      .filter(x => x.cat_id === r.cat_id && x.statut === "confirmé" && sameClient(x))
+      .sort((a,b) => (a.date+a.slot).localeCompare(b.date+b.slot));
+    const idx = allSame.findIndex(x => x.id === r.id);
+    if(idx === -1) return null;
+    const nb = idx + 1;
+    const cycle = nb % 10;
+    if(cycle === 0) return {remise:10, nb};
+    if(cycle === 5) return {remise:5, nb};
+    return null;
+  };
+    const Row=({r})=>(
     <div style={{padding:"16px 0",borderBottom:`1px solid ${C.borderLight}`,display:"flex",gap:14,alignItems:"flex-start",opacity:r.statut==="annulé"?.35:1}}>
       <div style={{minWidth:44}}>
         <div style={{fontSize:13,fontWeight:700,color:C.text}}>{r.slot}</div>
@@ -1334,7 +1379,18 @@ function AdminView({onExit}) {
       <div style={{flex:1,minWidth:0}}>
         <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
           <div>
-            <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2}}>{r.prestation}</div>
+            <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+              {r.prestation}
+              {(() => {
+                const promo = getPromoFor(r);
+                if(!promo) return null;
+                return (
+                  <span style={{fontSize:10,fontWeight:700,background:"#3a2848",color:"#f0c060",padding:"2px 8px",borderRadius:10,letterSpacing:.3}}>
+                    🎁 -{promo.remise}€ ({promo.nb}e)
+                  </span>
+                );
+              })()}
+            </div>
             <div style={{fontSize:12,color:C.textMid}}>{r.client_prenom} {r.client_nom} · {r.client_tel}</div>
           </div>
           <div style={{textAlign:"right"}}>
