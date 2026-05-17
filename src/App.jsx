@@ -813,6 +813,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
       <div style={{fontSize:14,color:C.textMid,lineHeight:2,marginBottom:8}}>{done.prestation}<br/>{fmtLong(done.date)} à {done.slot}</div>
       {done.acompte>0&&<div style={{fontSize:13,color:C.accentDark,fontWeight:500,marginBottom:20}}>Acompte {done.acompte} € réglé ✓</div>}
       <div style={{fontSize:12,color:C.textLight,marginBottom:36,lineHeight:1.7}}>Un SMS de rappel vous sera envoyé 24h avant.</div>
+      <AdresseBlock/>
       <GBtn onClick={()=>{setDone(null);setSvcId(null);setOpenSub(null);setSelPresta(null);setDate("");setSlot("");}}>Nouvelle réservation</GBtn>
     </div>
   );
