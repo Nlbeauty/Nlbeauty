@@ -396,6 +396,7 @@ function AuthModal({onAuth,onClose,booking}) {
   const [email,setEmail]=useState(()=>localStorage.getItem("nlb_email")||""),[pw,setPw]=useState("");
   const [prenom,setPrenom]=useState(""),[nom,setNom]=useState(""),[tel,setTel]=useState("");
   const [loading,setLoading]=useState(false),[err,setErr]=useState("");
+  const [resetMsg,setResetMsg]=useState(""),[resetLoading,setResetLoading]=useState(false);
 
   const submit=async()=>{
     setErr("");setLoading(true);
@@ -450,6 +451,21 @@ function AuthModal({onAuth,onClose,booking}) {
         )}
         <div style={{marginBottom:12}}><Lbl>Email</Lbl><Inp value={email} onChange={e=>setEmail(e.target.value)} placeholder="marie@email.fr" type="email"/></div>
         <div style={{marginBottom:12}}><Lbl>Mot de passe</Lbl><Inp value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••••" type="password"/></div>
+        {mode==="login"&&(
+              <div style={{marginBottom:14,marginTop:-8,textAlign:"right"}}>
+                <button type="button" onClick={async()=>{
+                  if(!email){setResetMsg("Saisis ton email d'abord.");return;}
+                  setResetLoading(true);setResetMsg("");
+                  const r=await resetClientPassword(email);
+                  setResetLoading(false);
+                  if(r.ok){setResetMsg("✓ Email envoyé ! Vérifie ta boîte (et les spams).");}
+                  else{setResetMsg("Erreur : "+r.error);}
+                }} style={{background:"none",border:"none",color:C.accentDark,fontSize:13,cursor:"pointer",textDecoration:"underline",padding:0,fontFamily:"inherit"}}>
+                  {resetLoading?"Envoi…":"Mot de passe oublié ?"}
+                </button>
+              </div>
+            )}
+            {resetMsg&&<div style={{fontSize:13,color:resetMsg.startsWith("✓")?"#2d7a4f":"#c05050",marginBottom:14,padding:"10px 14px",background:resetMsg.startsWith("✓")?"#e8f5ee":"#fff0f0",borderRadius:8}}>{resetMsg}</div>}
         {err&&<div style={{fontSize:13,color:"#c05050",marginBottom:14,padding:"10px 14px",background:"#fff0f0",borderRadius:8}}>{err}</div>}
         <PBtn onClick={submit} disabled={loading}>{loading?"Chargement…":mode==="login"?booking?"Confirmer ma réservation":"Se connecter":booking?"Créer mon compte et réserver":"Créer un compte"}</PBtn>
         <div style={{textAlign:"center",fontSize:11,color:C.textLight,marginTop:14,lineHeight:1.6}}>Vos données sont utilisées uniquement pour la gestion de vos rendez-vous.</div>
