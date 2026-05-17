@@ -727,6 +727,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
       // Fidélité : si palier atteint, notif promo en plus
       const promoFid = checkFidelitePromo(allRdvs, rdv);
       if(promoFid) sendPush(`🎁 FIDÉLITÉ — ${rdv.client_prenom} ${rdv.client_nom}`, promoFid.msg);
+      if(saved){
         setDone(saved);
         onBooked(saved);
         sc(doneRef);
