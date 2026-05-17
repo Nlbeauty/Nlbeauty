@@ -754,7 +754,6 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
       onBooked(saved);
       sc(doneRef);
     } catch(e){
-    } catch(e){
       console.log("Erreur réservation:", e);
       setConfirmError("Erreur réseau. Vérifiez votre connexion et réessayez.");
     }
