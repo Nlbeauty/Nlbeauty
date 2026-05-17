@@ -738,7 +738,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
       const saved = Array.isArray(res) ? res[0] : res;
       // Envoyer les emails et notification push
       sendEmails(rdv, sess.user.email);
-      sendPush(`Nouveau RDV — ${rdv.client_prenom} ${rdv.client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`);
+      sendPush(`${rdv.client_prenom} ${rdv.client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`);
       // Fidélité : si palier atteint, notif promo en plus
       const promoFid = checkFidelitePromo(allRdvs, rdv);
       if(promoFid) sendPush(`🎁 FIDÉLITÉ — ${rdv.client_prenom} ${rdv.client_nom}`, promoFid.msg);
@@ -1146,7 +1146,7 @@ function AdminCreateRdvView({allRdvs, profs, onCreated}) {
       }
       // Email auto à la cliente (si email fourni)
       if(client_email) sendEmails(rdv, client_email);
-      sendPush(`📅 RDV créé par admin — ${client_prenom} ${client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`);
+      sendPush(`${client_prenom} ${client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`);
       // Fidélité : si palier atteint, notif promo en plus
       const promoFidAdmin = checkFidelitePromo(allRdvs, rdv);
       if(promoFidAdmin) sendPush(`🎁 FIDÉLITÉ — ${client_prenom} ${client_nom}`, promoFidAdmin.msg);
