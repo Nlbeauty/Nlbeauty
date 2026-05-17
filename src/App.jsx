@@ -598,6 +598,47 @@ function PlanityDatePicker({selPresta,allRdvs,allSupaBlocked,selectedDate,select
 }
 
 // ── RÉSERVATION ───────────────────────────────────────────────────────────────
+// — BLOC ADRESSE & ARRIVÉE (réutilisable)
+function AdresseBlock(){
+  const adresse = "9 rue André Saves, 31300 Toulouse";
+  const adresseEncoded = encodeURIComponent(adresse);
+  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${adresseEncoded}`;
+  const wazeUrl = `https://waze.com/ul?q=${adresseEncoded}&navigate=yes`;
+  const instaUrl = "https://ig.me/m/neylika31";
+  const smsUrl = "sms:+33680894349";
+  const btnNeutre = {
+    display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+    padding:"11px", background:C.surfaceAlt, border:`1px solid ${C.border}`,
+    borderRadius:10, fontSize:13, color:C.textMid, textDecoration:"none", fontWeight:500,
+  };
+  const btnAccent = {
+    ...btnNeutre, background:C.accentLight, border:`1px solid ${C.accentDark}`, color:C.accent,
+  };
+  return (
+    <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, padding:"18px 20px", marginTop:20}}>
+      <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:14}}>
+        <span style={{fontSize:18, color:C.accent}}>📍</span>
+        <div style={{fontWeight:500, fontSize:14, color:C.text, letterSpacing:"0.3px"}}>Adresse du rendez-vous</div>
+      </div>
+      <div style={{fontSize:16, marginBottom:4, color:C.text, fontWeight:500}}>9 rue André Saves</div>
+      <div style={{fontSize:14, marginBottom:16, color:C.textLight}}>31300 Toulouse</div>
+      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:18}}>
+        <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={btnNeutre}>🗺️ Maps</a>
+        <a href={wazeUrl} target="_blank" rel="noopener noreferrer" style={btnNeutre}>🧭 Waze</a>
+      </div>
+      <div style={{borderTop:`1px solid ${C.borderLight}`, paddingTop:14}}>
+        <div style={{display:"flex", alignItems:"flex-start", gap:8, marginBottom:12}}>
+          <span style={{fontSize:16, color:C.accent, marginTop:2}}>🔔</span>
+          <div style={{fontSize:13, color:C.textMid, lineHeight:1.5}}>Préviens-moi quand tu arrives 💜</div>
+        </div>
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
+          <a href={instaUrl} target="_blank" rel="noopener noreferrer" style={btnAccent}>📷 Instagram</a>
+          <a href={smsUrl} style={btnNeutre}>💬 SMS</a>
+        </div>
+      </div>
+    </div>
+  );
+}
 function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
   const [svcId,setSvcId]=useState(null);
   const [openSub,setOpenSub]=useState(null);
