@@ -43,6 +43,28 @@ const getAdminSession = () => {
   }
 };
 
+// —— RESET MOT DE PASSE CLIENT ——————————————————————
+const resetClientPassword = async (email) => {
+  const res = await fetch(`${SUPA_URL}/auth/v1/recover`, {
+    method: "POST",
+    headers: {
+      "apikey": SUPA_PUB,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      email,
+      options: {
+        redirectTo: "https://neylika.vercel.app/?reset=1"
+      }
+    }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false, error: data.error_description || data.msg || "Impossible d'envoyer l'email" };
+  }
+  return { ok: true };
+};
+
 // ─── EMAILJS ──────────────────────────────────────────────────────────────────
 const EJS_SERVICE = "service_kavvgs8";
 const EJS_TPL_CLIENTE = "template_db2x2jl";
