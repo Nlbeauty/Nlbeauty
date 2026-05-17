@@ -738,17 +738,22 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
         return;
       }
       const saved = Array.isArray(res) ? res[0] : res;
-      // Envoyer les emails et notification push
-      sendEmails(rdv, sess.user.email);
-      sendPush(`${rdv.client_prenom} ${rdv.client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`);
-      // Fidélité : si palier atteint, notif promo en plus
-      const promoFid = checkFidelitePromo(allRdvs, rdv);
-      if(promoFid) sendPush(`🎁 FIDÉLITÉ — ${rdv.client_prenom} ${rdv.client_nom}`, promoFid.msg);
-      if(saved){
-        setDone(saved);
-        onBooked(saved);
-        sc(doneRef);
+      // Sécurité : vérifier que le RDV a vraiment été créé (a un id)
+      if(!saved || !saved.id){
+        setConfirmError("Erreur : le rendez-vous n'a pas pu être enregistré. Réessayez ou contactez-nous.");
+        setConfirming(false);
+        return;
       }
+      // Envoyer les emails et notification push (seulement si insert OK)
+      sendEmails(saved, sess.user.email);
+      sendPush(`${saved.client_prenom} ${saved.client_nom}`, `${saved.prestation} · ${fmtLong(saved.date)} à ${saved.slot}`);
+      // Fidélité : si palier atteint, notif promo en plus
+      const promoFid = checkFidelitePromo(allRdvs, saved);
+      if(promoFid) sendPush(`🎁 FIDÉLITÉ — ${saved.client_prenom} ${saved.client_nom}`, promoFid.msg);
+      setDone(saved);
+      onBooked(saved);
+      sc(doneRef);
+    } catch(e){
     } catch(e){
       console.log("Erreur réservation:", e);
       setConfirmError("Erreur réseau. Vérifiez votre connexion et réessayez.");
