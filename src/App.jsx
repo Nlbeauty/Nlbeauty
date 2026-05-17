@@ -972,27 +972,26 @@ function MesRdvsView({rdvs,loading}) {
     sendPush(`❌ Annulation — ${r.client_prenom} ${r.client_nom}`, `${r.prestation} · ${fmtLong(r.date)} à ${r.slot}`);
     window.location.reload();
   };
-  const Card=({r})=>(
-    <div style={{padding:"16px 0",borderBottom:`1px solid ${C.borderLight}`,display:"flex",gap:14,alignItems:"flex-start",opacity:r.statut==="annulé"?.4:1}}>
-      <div style={{width:3,alignSelf:"stretch",borderRadius:2,background:svcColor(r.cat_id),flexShrink:0}}/>
-      <div style={{flex:1}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-          <div>
-            <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:3}}>{r.prestation}</div>
-            <div style={{fontSize:12,color:C.textMid}}>{fmtLong(r.date)} · {r.slot}</div>
-            {r.statut==="annulé"&&<div style={{fontSize:11,color:"#c05050",marginTop:4}}>Annulé</div>}
+ const Card=({r})=>{
+    const isUpcoming = r.statut!=="annulé" && r.date>=todayStr();
+    return (
+      <div style={{padding:"16px 0",borderBottom:`1px solid ${C.borderLight}`,display:"flex",gap:14,alignItems:"stretch",opacity:r.statut==="annulé"?0.5:1}}>
+        <div style={{width:3,alignSelf:"stretch",borderRadius:2,background:svcColor(r.cat_id),flexShrink:0}}/>
+        <div style={{flex:1}}>
+          <div style={{textAlign:"center",paddingBottom:isUpcoming?14:0,borderBottom:isUpcoming?`1px solid ${C.borderLight}`:"none",marginBottom:isUpcoming?14:0}}>
+            <div style={{fontSize:18,fontWeight:500,color:C.text,marginBottom:6}}>{r.prestation}</div>
+            <div style={{fontSize:14,color:C.accent}}>{fmtLong(r.date)} · {r.slot}</div>
+            <div style={{fontSize:13,color:C.textLight,marginTop:4}}>{r.prix} €</div>
+            {r.statut==="annulé"&&<div style={{fontSize:12,color:"#c05050",marginTop:6}}>Annulé</div>}
           </div>
-          <div style={{textAlign:"right",flexShrink:0}}>
-            <div style={{fontSize:14,fontWeight:700,color:C.textMid}}>{r.prix} €</div>
-          </div>
+          {isUpcoming&&<AdresseBlock/>}
+          {isUpcoming&&canCancel(r)&&(
+            <button onClick={()=>handleCancel(r)} style={{marginTop:14,width:"100%",fontSize:12,color:"#c05050",background:"none",border:"1px solid #3a1a1a",borderRadius:8,padding:"9px",cursor:"pointer"}}>Annuler le rendez-vous</button>
+          )}
         </div>
-        {r.statut!=="annulé"&&r.date>=todayStr()&&canCancel(r)&&(
-          <button onClick={()=>handleCancel(r)} style={{marginTop:10,fontSize:12,color:"#c05050",background:"none",border:"1px solid #3a1a1a",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Annuler</button>
-        )}
       </div>
-        {r.statut!=="annulé"&&r.date>=todayStr()&&<AdresseBlock/>}
-    </div>
-  );
+    );
+  };
   if(loading) return <div style={{textAlign:"center",padding:48,color:C.textLight,fontSize:14}}>Chargement…</div>;
   return (
     <div>
