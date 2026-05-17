@@ -706,9 +706,14 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
 
   const isLocked=(s)=>s.locked&&!laserUnlocked;
 
+  const [confirming, setConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState("");
   const handleConfirm=async(sess)=>{
     setShowAuth(false);
     if(!selPresta||!date||!slot)return;
+    if(confirming) return; // anti double-clic
+    setConfirming(true);
+    setConfirmError("");
     try {
       const rdv={
         user_id:sess.user.id,cat_id:svcId,service:svc.label,
@@ -720,6 +725,16 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
         statut:"confirmé",
       };
       const res=await api.post("rdvs",rdv,sess.token);
+      // Détection erreur Supabase (genre doublon UNIQUE)
+      if(res && res.code){
+        if(res.code === "23505"){
+          setConfirmError("Vous avez déjà un rendez-vous à cet horaire. Choisissez un autre créneau.");
+        } else {
+          setConfirmError("Erreur : "+(res.message||"impossible de créer le rendez-vous."));
+        }
+        setConfirming(false);
+        return;
+      }
       const saved = Array.isArray(res) ? res[0] : res;
       // Envoyer les emails et notification push
       sendEmails(rdv, sess.user.email);
@@ -732,7 +747,11 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
         onBooked(saved);
         sc(doneRef);
       }
-    } catch(e){console.log("Erreur réservation:", e);}
+    } catch(e){
+      console.log("Erreur réservation:", e);
+      setConfirmError("Erreur réseau. Vérifiez votre connexion et réessayez.");
+    }
+    setConfirming(false);
   };
 
   const selectPresta=(p,subcat)=>{
@@ -877,11 +896,11 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
 
           </div>
 
-          <PBtn onClick={()=>session?handleConfirm(session):setShowAuth(true)}>
-            {session?"Confirmer le rendez-vous":"Continuer pour confirmer"}
+          <PBtn onClick={()=>session?handleConfirm(session):setShowAuth(true)} disabled={confirming}>
+            {confirming?"Confirmation en cours…":session?"Confirmer le rendez-vous":"Continuer pour confirmer"}
           </PBtn>
+          {confirmError&&<div style={{textAlign:"center",fontSize:13,color:"#f08080",marginTop:10,padding:"10px 14px",background:"#2a1010",border:"1px solid #5a2020",borderRadius:8}}>{confirmError}</div>}
           {!session&&<div style={{textAlign:"center",fontSize:12,color:C.textLight,marginTop:10}}>Connexion requise pour finaliser</div>}
-
         </div>
       )}
     </div>
@@ -1079,6 +1098,7 @@ function AdminCreateRdvView({allRdvs, profs, onCreated}) {
   };
 
   const handleCreate = async () => {
+    if(saving) return; // anti double-clic
     setMsg(null);
     if(!presta){ setMsg({type:"err", text:"Choisis une prestation."}); return; }
     if(!date || !slot){ setMsg({type:"err", text:"Choisis une date et un créneau."}); return; }
@@ -1108,6 +1128,16 @@ function AdminCreateRdvView({allRdvs, profs, onCreated}) {
         statut: "confirmé",
       };
       const res = await api.post("rdvs", rdv);
+      // Détection erreur Supabase (genre doublon UNIQUE)
+      if(res && res.code){
+        if(res.code === "23505"){
+          setMsg({type:"err", text:"Cette cliente a déjà un rendez-vous à cet horaire. Choisis un autre créneau."});
+        } else {
+          setMsg({type:"err", text:"Erreur insertion : "+(res.message||"inconnue")});
+        }
+        setSaving(false);
+        return;
+      }
       const saved = Array.isArray(res) ? res[0] : res;
       if(!saved || saved.error){
         setMsg({type:"err", text:"Erreur insertion : "+(saved?.message||"inconnue")});
