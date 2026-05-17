@@ -1694,7 +1694,7 @@ export default function App() {
               <button onClick={()=>setShowLoginModal(true)} style={{fontSize:13,color:"#d4c4e8",background:"none",border:`1px solid ${C.border}`,borderRadius:20,padding:"8px 16px",cursor:"pointer"}}>Se connecter</button>
             )}
           </div>
-          <p style={{fontSize:15,color:"#d4c4ec",marginTop:10,lineHeight:1.7,letterSpacing:.5,fontStyle:"italic"}}>Ton espace beauté à domicile · Ongles · Laser · Bronzage</p>
+          <p style={{fontSize:15,color:"#d4c4ec",marginTop:10,lineHeight:1.7,letterSpacing:.5,fontStyle:"italic"}}>Ton adresse beauté à la Cartoucherie · Ongles · Laser · Bronzage</p>
           <div style={{display:"flex",gap:12,marginTop:12,alignItems:"center"}}>
             <a href="https://www.instagram.com/neylika31/" target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,textDecoration:"none"}}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
