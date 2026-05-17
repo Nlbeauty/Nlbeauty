@@ -990,6 +990,7 @@ function MesRdvsView({rdvs,loading}) {
           <button onClick={()=>handleCancel(r)} style={{marginTop:10,fontSize:12,color:"#c05050",background:"none",border:"1px solid #3a1a1a",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Annuler</button>
         )}
       </div>
+        {r.statut!=="annulé"&&r.date>=todayStr()&&<AdresseBlock/>}
     </div>
   );
   if(loading) return <div style={{textAlign:"center",padding:48,color:C.textLight,fontSize:14}}>Chargement…</div>;
