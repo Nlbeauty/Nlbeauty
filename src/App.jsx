@@ -78,6 +78,8 @@ const sendEmails = async (rdv, clientEmail) => {
 };
 
 const sendCancelEmail = async (rdv) => {
+  // Si la cliente n'a pas d'email (RDV créé admin sans email), on n'envoie rien
+  if(!rdv.client_email) return;
   const JOURS = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
   const MOIS = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
   const dateObj = new Date(rdv.date + "T12:00:00");
@@ -87,11 +89,11 @@ const sendCancelEmail = async (rdv) => {
     client_nom: rdv.client_nom||"",
     client_tel: rdv.client_tel||"",
     client_email: rdv.client_email||"",
-    prestation: "❌ ANNULATION — " + rdv.prestation,
+    prestation: rdv.prestation,
     date: dateFr,
     slot: rdv.slot||"",
     prix: rdv.prix||0,
-    to_email: "nlbeauty31@gmail.com",
+    to_email: rdv.client_email,
   };
   try {
     await fetch("https://api.emailjs.com/api/v1.0/email/send", {
