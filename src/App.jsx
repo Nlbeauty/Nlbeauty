@@ -1023,7 +1023,7 @@ function MesRdvsView({rdvs,loading}) {
   const handleCancel=async(r)=>{
     if(!confirm("Annuler ce rendez-vous ?")) return;
     await api.patch("rdvs",`id=eq.${r.id}`,{statut:"annulé"});
-    fetch("https://hook.eu1.make.com/0usna6mkvsngq4rdmaiokba95cnrpwsn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({client_prenom:r.client_prenom,client_nom:r.client_nom,client_email:r.client_email,prestation:r.prestation,date:r.date,slot:r.slot})});
+    await fetch("https://hook.eu1.make.com/0usna6mkvsngq4rdmaiokba95cnrpwsn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({client_prenom:r.client_prenom,client_nom:r.client_nom,client_email:r.client_email,prestation:r.prestation,date:r.date,slot:r.slot})});
     window.location.reload();
   };
  const Card=({r})=>{
