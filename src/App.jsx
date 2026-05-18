@@ -842,8 +842,9 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
         return;
       }
       // Envoyer les emails et notification push (seulement si insert OK)
-      fetch("https://hook.eu1.make.com/9otx68mnoy1f6my0oixwkhozvrtkamcb",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({client_prenom:saved.client_prenom,client_nom:saved.client_nom,client_email:saved.client_email,prestation:saved.prestation,date:saved.date,slot:saved.slot,prix:saved.prix})});
-      // Fidélité : si palier atteint, notif promo en plus
+      sendEmails(saved, sess.user.email);
+      sendPush(`${saved.client_prenom} ${saved.client_nom}`, `${saved.prestation} · ${fmtLong(saved.date)} à ${saved.slot}`);      
+        // Fidélité : si palier atteint, notif promo en plus
       const promoFid = checkFidelitePromo(allRdvs, saved);
       if(promoFid) sendPush(`🎁 FIDÉLITÉ — ${saved.client_prenom} ${saved.client_nom}`, promoFid.msg);
       setDone(saved);
@@ -1023,7 +1024,8 @@ function MesRdvsView({rdvs,loading}) {
   const handleCancel=async(r)=>{
     if(!confirm("Annuler ce rendez-vous ?")) return;
     await api.patch("rdvs",`id=eq.${r.id}`,{statut:"annulé"});
-    await fetch("https://hook.eu1.make.com/0usna6mkvsngq4rdmaiokba95cnrpwsn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({client_prenom:r.client_prenom,client_nom:r.client_nom,client_email:r.client_email,prestation:r.prestation,date:r.date,slot:r.slot})});
+    await sendCancelEmail(r);
+sendPush(`❌ Annulation − ${r.client_prenom} ${r.client_nom}`, `${r.prestation} · ${fmtLong(r.date)} à ${r.slot}`);
     window.location.reload();
   };
  const Card=({r})=>{
@@ -1247,7 +1249,8 @@ function AdminCreateRdvView({allRdvs, profs, onCreated}) {
         return;
       }
       // Email auto à la cliente (si email fourni)
-      fetch("https://hook.eu1.make.com/9otx68mnoy1f6my0oixwkhozvrtkamcb",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({client_prenom:saved.client_prenom,client_nom:saved.client_nom,client_email:saved.client_email,prestation:saved.prestation,date:saved.date,slot:saved.slot,prix:saved.prix})});
+      if(client_email) sendEmails(rdv, client_email);
+sendPush(`${client_prenom} ${client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`);
       // Fidélité : si palier atteint, notif promo en plus
       const promoFidAdmin = checkFidelitePromo(allRdvs, rdv);
       if(promoFidAdmin) sendPush(`🎁 FIDÉLITÉ — ${client_prenom} ${client_nom}`, promoFidAdmin.msg);
@@ -1440,7 +1443,8 @@ function AdminView({onExit}) {
     // Email annulation
     const rdvAnn = rdvs.find(r=>r.id===id);
     if(rdvAnn) {
-      fetch("https://hook.eu1.make.com/0usna6mkvsngq4rdmaiokba95cnrpwsn",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({client_prenom:rdvAnn.client_prenom,client_nom:rdvAnn.client_nom,client_email:rdvAnn.client_email,prestation:rdvAnn.prestation,date:rdvAnn.date,slot:rdvAnn.slot})});
+      sendCancelEmail(rdvAnn);
+sendPush(`❌ Annulation − ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`, `${rdvAnn.prestation} · ${fmtLong(rdvAnn.date)} à ${rdvAnn.slot}`);
     }
   };
 
