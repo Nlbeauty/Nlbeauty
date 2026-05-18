@@ -65,6 +65,23 @@ const resetClientPassword = async (email) => {
   }
   return { ok: true };
 };
+// —— UPDATE MOT DE PASSE (apres reset) ——————————————
+const updateClientPassword = async (accessToken, newPassword) => {
+  const res = await fetch(`${SUPA_URL}/auth/v1/user`, {
+    method: "PUT",
+    headers: {
+      "apikey": SUPA_PUB,
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ password: newPassword }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: false, error: data.error_description || data.msg || "Impossible de modifier le mot de passe" };
+  }
+  return { ok: true };
+};
 
 // ─── EMAILJS ──────────────────────────────────────────────────────────────────
 const EJS_SERVICE = "service_kavvgs8";
