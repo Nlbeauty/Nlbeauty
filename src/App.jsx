@@ -432,7 +432,7 @@ function AuthModal({onAuth,onClose,booking}) {
         if(res.user){
           await api.upsert("profiles",{id:res.user.id,prenom,nom,tel,email},res.access_token);
           onAuth({user:res.user,token:res.access_token,refresh_token:res.refresh_token,profile:{prenom,nom,tel,email}});
-        } else setErr("Vérifiez votre email pour confirmer.");
+        } else setErr(res.msg||res.message||res.error_description||"Mot de passe trop court (6 caractères minimum).");
       }
     } catch{setErr("Erreur réseau.");}
     setLoading(false);
