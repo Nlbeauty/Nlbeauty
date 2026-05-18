@@ -1247,7 +1247,7 @@ function AdminCreateRdvView({allRdvs, profs, onCreated}) {
         return;
       }
       // Email auto à la cliente (si email fourni)
-      fetch("https://hook.eu1.make.com/9otx68mnoy1f6my0oixwkhozvrtkamcb",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({client_prenom:rdv.client_prenom,client_nom:rdv.client_nom,client_email:rdv.client_email,prestation:rdv.prestation,date:rdv.date,slot:rdv.slot,prix:rdv.prix})}); à ${rdv.slot}`);
+      fetch("https://hook.eu1.make.com/9otx68mnoy1f6my0oixwkhozvrtkamcb",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({client_prenom:rdv.client_prenom,client_nom:rdv.client_nom,client_email:rdv.client_email,prestation:rdv.prestation,date:rdv.date,slot:rdv.slot,prix:rdv.prix})});
       // Fidélité : si palier atteint, notif promo en plus
       const promoFidAdmin = checkFidelitePromo(allRdvs, rdv);
       if(promoFidAdmin) sendPush(`🎁 FIDÉLITÉ — ${client_prenom} ${client_nom}`, promoFidAdmin.msg);
