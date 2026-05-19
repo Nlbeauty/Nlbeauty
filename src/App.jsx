@@ -45,7 +45,6 @@ const getAdminSession = () => {
 
 // —— RESET MOT DE PASSE CLIENT ——————————————————————
 const resetClientPassword = async (email) => {
-
   const res = await fetch(`${SUPA_URL}/auth/v1/recover`, {
     method: "POST",
     headers: {
@@ -150,11 +149,12 @@ const NTFY_TOPIC = "neylika-rdv-q8mk3xfp7vwn";
 
 const sendPush = async (title, message) => {
   try {
-    // Utiliser l'API EmailJS pour envoyer la notif ntfy via leurs serveurs
+    // FIX: keepalive permet à la requête de continuer même si la page navigue/recharge
     await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
       method: "POST",
       body: `${title}\n${message}`,
       mode: "no-cors",
+      keepalive: true,
     });
   } catch(e) { console.log("Push error:", e); }
 };
@@ -181,17 +181,46 @@ const checkFidelitePromo = (allRdvs, newRdv) => {
   return null;
 };
 
+// ─── CLIENT SESSION HELPERS ────────────────────────────
+const CLIENT_STORAGE_KEY = "nlb_sess";
+
+const getClientSession = () => {
+  try {
+    const raw = localStorage.getItem(CLIENT_STORAGE_KEY);
+    if (!raw) return null;
+    const s = JSON.parse(raw);
+    // Vérifie expiration : Supabase stocke expires_at en secondes Unix
+    if (s.expires_at && s.expires_at * 1000 < Date.now()) {
+      // Expired but keep refresh_token for refresh attempt
+      return s;
+    }
+    return s;
+  } catch {
+    return null;
+  }
+};
+
 const api = {
   h: { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
   ah: (t) => ({ "apikey": SUPA_KEY, "Authorization": `Bearer ${t}`, "Content-Type": "application/json", "Prefer": "return=representation" }),
-  // Headers auto : token admin si connectée, sinon clé anonyme
+  // Headers auto : priorité au token cliente connectée, sinon token admin, sinon clé anonyme
   authHeaders() {
+    // FIX: prendre d'abord la session cliente, sinon admin, sinon anon
+    const clientSess = getClientSession();
+    if (clientSess && clientSess.token) {
+      return this.ah(clientSess.token);
+    }
     const s = getAdminSession();
     return s ? this.ah(s.access_token) : this.h;
   },
   async get(table, q="") { const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${q}`,{headers:this.authHeaders()}); return r.json(); },
   async post(table, body, token) { const h=token?this.ah(token):{...this.authHeaders(),"Prefer":"return=representation"}; const r=await fetch(`${SUPA_URL}/rest/v1/${table}`,{method:"POST",headers:h,body:JSON.stringify(body)}); return r.json(); },
-  async patch(table, filter, body) { const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`,{method:"PATCH",headers:{...this.authHeaders(),"Prefer":"return=representation"},body:JSON.stringify(body)}); return r.json(); },
+  // FIX: patch accepte maintenant un token optionnel pour les opérations cliente
+  async patch(table, filter, body, token) {
+    const h = token ? {...this.ah(token), "Prefer":"return=representation"} : {...this.authHeaders(),"Prefer":"return=representation"};
+    const r = await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`,{method:"PATCH",headers:h,body:JSON.stringify(body)});
+    return r.json();
+  },
   async signUp(email, password) { const r=await fetch(`${SUPA_URL}/auth/v1/signup`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({email,password})}); return r.json(); },
   async signIn(email, password) { const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({email,password})}); return r.json(); },
   async refreshToken(refresh_token) { const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=refresh_token`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({refresh_token})}); return r.json(); },
@@ -408,6 +437,55 @@ function Calendar({selected,onSelect,bookedDates=[],unavailableDates=[],firstAva
   );
 }
 
+// ── RESET PASSWORD VIEW ──────────────────────────────────────────────────────
+function ResetPasswordView({accessToken, onDone}) {
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState("");
+  const [success, setSuccess] = useState(false);
+
+  const submit = async () => {
+    setErr("");
+    if(pw1.length < 6){ setErr("Le mot de passe doit faire au moins 6 caractères."); return; }
+    if(pw1 !== pw2){ setErr("Les mots de passe ne correspondent pas."); return; }
+    setLoading(true);
+    const res = await updateClientPassword(accessToken, pw1);
+    setLoading(false);
+    if(res.ok){
+      setSuccess(true);
+      setTimeout(() => onDone(), 2000);
+    } else {
+      setErr(res.error);
+    }
+  };
+
+  if(success) return (
+    <div className="fu" style={{textAlign:"center",padding:"60px 20px"}}>
+      <div style={{width:56,height:56,borderRadius:"50%",background:C.accentLight,border:`1.5px solid ${C.accent}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px",color:C.accentDark,fontSize:22}}>✓</div>
+      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,marginBottom:10}}>Mot de passe modifié</div>
+      <div style={{fontSize:14,color:C.textMid}}>Vous pouvez maintenant vous connecter.</div>
+    </div>
+  );
+
+  return (
+    <div className="fu" style={{maxWidth:400,margin:"0 auto",padding:"60px 20px"}}>
+      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,marginBottom:8}}>Nouveau mot de passe</div>
+      <div style={{fontSize:13,color:C.textMid,marginBottom:24}}>Choisissez un nouveau mot de passe pour votre compte.</div>
+      <div style={{marginBottom:12}}>
+        <Lbl>Nouveau mot de passe</Lbl>
+        <Inp value={pw1} onChange={e=>setPw1(e.target.value)} type="password" placeholder="••••••••" autoComplete="new-password"/>
+      </div>
+      <div style={{marginBottom:14}}>
+        <Lbl>Confirmer le mot de passe</Lbl>
+        <Inp value={pw2} onChange={e=>setPw2(e.target.value)} type="password" placeholder="••••••••" autoComplete="new-password"/>
+      </div>
+      {err && <div style={{fontSize:13,color:"#c05050",marginBottom:14,padding:"10px 14px",background:"#fff0f0",borderRadius:8}}>{err}</div>}
+      <PBtn onClick={submit} disabled={loading}>{loading?"Mise à jour…":"Valider"}</PBtn>
+    </div>
+  );
+}
+
 // ── AUTH MODAL ────────────────────────────────────────────────────────────────
 function AuthModal({onAuth,onClose,booking}) {
   const [mode,setMode]=useState("login");
@@ -424,14 +502,14 @@ function AuthModal({onAuth,onClose,booking}) {
         if(res.error){setErr("Email ou mot de passe incorrect.");setLoading(false);return;}
         const prof=await fetch(`${SUPA_URL}/rest/v1/profiles?id=eq.${res.user.id}&select=*`,{headers:{"apikey":SUPA_PUB,"Authorization":`Bearer ${res.access_token}`}}).then(r=>r.json());
         localStorage.setItem("nlb_email", email);
-        onAuth({user:res.user,token:res.access_token,refresh_token:res.refresh_token,profile:prof[0]||{}});
+        onAuth({user:res.user,token:res.access_token,refresh_token:res.refresh_token,expires_at:res.expires_at,profile:prof[0]||{}});
       } else {
         if(!prenom||!nom||!tel){setErr("Tous les champs sont requis.");setLoading(false);return;}
         const res=await api.signUp(email,pw);
         if(res.error){setErr(res.error.message);setLoading(false);return;}
         if(res.user){
           await api.upsert("profiles",{id:res.user.id,prenom,nom,tel,email},res.access_token);
-          onAuth({user:res.user,token:res.access_token,refresh_token:res.refresh_token,profile:{prenom,nom,tel,email}});
+          onAuth({user:res.user,token:res.access_token,refresh_token:res.refresh_token,expires_at:res.expires_at,profile:{prenom,nom,tel,email}});
         } else setErr(res.msg||res.message||res.error_description||"Mot de passe trop court (6 caractères minimum).");
       }
     } catch{setErr("Erreur réseau.");}
@@ -841,12 +919,14 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
         setConfirming(false);
         return;
       }
-      // Envoyer les emails et notification push (seulement si insert OK)
-      sendEmails(saved, sess.user.email);
-      sendPush(`${saved.client_prenom} ${saved.client_nom}`, `${saved.prestation} · ${fmtLong(saved.date)} à ${saved.slot}`);      
-        // Fidélité : si palier atteint, notif promo en plus
+      // FIX: await sur sendEmails et sendPush pour qu'ils partent avant tout reload
+      await Promise.all([
+        sendEmails(saved, sess.user.email),
+        sendPush(`${saved.client_prenom} ${saved.client_nom}`, `${saved.prestation} · ${fmtLong(saved.date)} à ${saved.slot}`),
+      ]);
+      // Fidélité : si palier atteint, notif promo en plus
       const promoFid = checkFidelitePromo(allRdvs, saved);
-      if(promoFid) sendPush(`🎁 FIDÉLITÉ — ${saved.client_prenom} ${saved.client_nom}`, promoFid.msg);
+      if(promoFid) await sendPush(`🎁 FIDÉLITÉ — ${saved.client_prenom} ${saved.client_nom}`, promoFid.msg);
       setDone(saved);
       onBooked(saved);
       sc(doneRef);
@@ -1012,23 +1092,55 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
 }
 
 // ── MES RDV ───────────────────────────────────────────────────────────────────
-function MesRdvsView({rdvs,loading}) {
+function MesRdvsView({rdvs,loading,session,onRdvCancelled}) {
   const up=rdvs.filter(r=>r.date>=todayStr()&&r.statut!=="annulé").sort((a,b)=>a.date.localeCompare(b.date));
   const past=rdvs.filter(r=>r.date<todayStr()||r.statut==="annulé").sort((a,b)=>b.date.localeCompare(a.date));
   const svcColor=(catId)=>SERVICES.find(s=>s.id===catId)?.color||C.accent;
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+
   const canCancel=(r)=>{
     const rdvDate=new Date(`${r.date}T${r.slot}:00`);
     const now=new Date();
     return rdvDate.getTime()-now.getTime()>24*60*60*1000;
   };
+
   const handleCancel=async(r)=>{
     if(!confirm("Annuler ce rendez-vous ?")) return;
-    await api.patch("rdvs",`id=eq.${r.id}`,{statut:"annulé"});
-    await sendCancelEmail(r);
-sendPush(`❌ Annulation − ${r.client_prenom} ${r.client_nom}`, `${r.prestation} · ${fmtLong(r.date)} à ${r.slot}`);
-    window.location.reload();
+    if(cancelling) return;
+    setCancelling(true);
+    setCancelError("");
+    try {
+      // FIX CRITIQUE : passer le token de la session cliente pour que la RLS reconnaisse l'utilisateur
+      const token = session?.token;
+      if(!token){
+        setCancelError("Session expirée. Veuillez vous reconnecter.");
+        setCancelling(false);
+        return;
+      }
+      const patchRes = await api.patch("rdvs", `id=eq.${r.id}`, {statut:"annulé"}, token);
+      // Vérifier que l'update a vraiment été appliqué
+      const updated = Array.isArray(patchRes) ? patchRes[0] : patchRes;
+      if(!updated || updated.error || (updated.statut && updated.statut !== "annulé")){
+        setCancelError("Impossible d'annuler ce rendez-vous. Contactez-nous.");
+        setCancelling(false);
+        return;
+      }
+      // FIX: await sur les deux pour qu'ils partent avant reload
+      await Promise.all([
+        sendCancelEmail(r),
+        sendPush(`❌ Annulation − ${r.client_prenom} ${r.client_nom}`, `${r.prestation} · ${fmtLong(r.date)} à ${r.slot}`),
+      ]);
+      // Mise à jour locale via callback (évite le reload brutal)
+      if(onRdvCancelled) onRdvCancelled(r.id);
+    } catch(e){
+      console.log("Erreur annulation:", e);
+      setCancelError("Erreur réseau. Réessayez.");
+    }
+    setCancelling(false);
   };
- const Card=({r})=>{
+
+  const Card=({r})=>{
     const isUpcoming = r.statut!=="annulé" && r.date>=todayStr();
     return (
       <div style={{padding:"16px 0",borderBottom:`1px solid ${C.borderLight}`,display:"flex",gap:14,alignItems:"stretch",opacity:r.statut==="annulé"?0.5:1}}>
@@ -1042,7 +1154,9 @@ sendPush(`❌ Annulation − ${r.client_prenom} ${r.client_nom}`, `${r.prestatio
           </div>
           {isUpcoming&&<AdresseBlock/>}
           {isUpcoming&&canCancel(r)&&(
-            <button onClick={()=>handleCancel(r)} style={{marginTop:14,width:"100%",fontSize:12,color:"#c05050",background:"none",border:"1px solid #3a1a1a",borderRadius:8,padding:"9px",cursor:"pointer"}}>Annuler le rendez-vous</button>
+            <button onClick={()=>handleCancel(r)} disabled={cancelling} style={{marginTop:14,width:"100%",fontSize:12,color:cancelling?C.textLight:"#c05050",background:"none",border:`1px solid ${cancelling?C.border:"#3a1a1a"}`,borderRadius:8,padding:"9px",cursor:cancelling?"default":"pointer"}}>
+              {cancelling?"Annulation en cours…":"Annuler le rendez-vous"}
+            </button>
           )}
         </div>
       </div>
@@ -1051,6 +1165,7 @@ sendPush(`❌ Annulation − ${r.client_prenom} ${r.client_nom}`, `${r.prestatio
   if(loading) return <div style={{textAlign:"center",padding:48,color:C.textLight,fontSize:14}}>Chargement…</div>;
   return (
     <div>
+      {cancelError && <div style={{padding:"12px 14px",background:"#2a1010",border:"1px solid #5a2020",borderRadius:8,marginBottom:16,fontSize:13,color:"#f08080"}}>{cancelError}</div>}
       {up.length>0&&<div style={{marginBottom:32}}><Lbl>À venir</Lbl>{up.map(r=><Card key={r.id} r={r}/>)}</div>}
       {past.length>0&&<div><Lbl>Historique</Lbl>{past.map(r=><Card key={r.id} r={r}/>)}</div>}
       {up.length===0&&past.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous pour l'instant.</div>}
@@ -1085,7 +1200,7 @@ function PlanningAdmin() {
     if(isAutoBlocked(slot)) return;
     setSaving(true);
     if(isManualBlocked(slot)) {
-      await fetch(`${SUPA_URL}/rest/v1/blocked_slots?date=eq.${selDate}&slot=eq.${encodeURIComponent(slot)}`,{method:"DELETE",headers:{"apikey":SUPA_KEY,"Authorization":`Bearer ${SUPA_KEY}`}});
+      await fetch(`${SUPA_URL}/rest/v1/blocked_slots?date=eq.${selDate}&slot=eq.${encodeURIComponent(slot)}`,{method:"DELETE",headers:api.authHeaders()});
       setSupaBlocked(p=>p.filter(s=>s!==slot));
     } else {
       await api.post("blocked_slots",{date:selDate,slot});
@@ -1104,7 +1219,7 @@ function PlanningAdmin() {
 
   const unblockFullDay = async () => {
     setSaving(true);
-    await fetch(`${SUPA_URL}/rest/v1/blocked_slots?date=eq.${selDate}`,{method:"DELETE",headers:{"apikey":SUPA_KEY,"Authorization":`Bearer ${SUPA_KEY}`}});
+    await fetch(`${SUPA_URL}/rest/v1/blocked_slots?date=eq.${selDate}`,{method:"DELETE",headers:api.authHeaders()});
     setSupaBlocked([]);
     setSaving(false);
   };
@@ -1248,12 +1363,14 @@ function AdminCreateRdvView({allRdvs, profs, onCreated}) {
         setSaving(false);
         return;
       }
-      // Email auto à la cliente (si email fourni)
-      if(client_email) sendEmails(rdv, client_email);
-sendPush(`${client_prenom} ${client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`);
+      // FIX: await sur les deux pour éviter qu'ils soient avortés
+      const tasks = [];
+      if(client_email) tasks.push(sendEmails(rdv, client_email));
+      tasks.push(sendPush(`${client_prenom} ${client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`));
+      await Promise.all(tasks);
       // Fidélité : si palier atteint, notif promo en plus
       const promoFidAdmin = checkFidelitePromo(allRdvs, rdv);
-      if(promoFidAdmin) sendPush(`🎁 FIDÉLITÉ — ${client_prenom} ${client_nom}`, promoFidAdmin.msg);
+      if(promoFidAdmin) await sendPush(`🎁 FIDÉLITÉ — ${client_prenom} ${client_nom}`, promoFidAdmin.msg);
       setMsg({type:"ok", text:`RDV créé pour ${client_prenom} ${client_nom} le ${fmtLong(date)} à ${slot}${client_email?" — email envoyé":""}.`});
       if(onCreated) onCreated(saved);
       // Reset partiel
@@ -1365,28 +1482,21 @@ sendPush(`${client_prenom} ${client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.d
   );
 }
 function AdminView({onExit}) {
-  const [code,setCode]=useState(""),[isUnlocked,setIsUnlocked]=useState(false);
+  const [isUnlocked,setIsUnlocked]=useState(false);
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPwd, setAdminPwd] = useState("");
-  // Au chargement : si on a déjà une session valide, on déverrouille automatiquement
-  useEffect(()=>{
-    const session = getAdminSession();
-    if(session){
-      setIsUnlocked(true);
-      load();
-    }
-  },[]);
-  // Au chargement : si on a déjà une session valide, on déverrouille automatiquement
-  useEffect(()=>{
-    const session = getAdminSession();
-    if(session){
-      setIsUnlocked(true);
-      load();
-    }
-  },[]);
   const [rdvs,setRdvs]=useState([]),[profs,setProfs]=useState([]);
   const [loading,setLoading]=useState(false),[tab,setTab]=useState("today");
   const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
+
+  // FIX: un seul useEffect au lieu de deux identiques
+  useEffect(()=>{
+    const session = getAdminSession();
+    if(session){
+      setIsUnlocked(true);
+      load();
+    }
+  },[]);
 
   // ✨ MODIFIÉ : on lit aussi le vrai état laser_access depuis Supabase
   const load = async () => {
@@ -1413,11 +1523,7 @@ function AdminView({onExit}) {
 
     const res = await fetch(`${SUPA_URL}/rest/v1/rpc/admin_set_laser_access`, {
       method: "POST",
-      headers: {
-        "apikey": SUPA_KEY,
-        "Authorization": `Bearer ${SUPA_KEY}`,
-        "Content-Type": "application/json",
-      },
+      headers: api.authHeaders(),
       body: JSON.stringify({
         target_user_id: uid,
         new_value: newVal,
@@ -1438,13 +1544,15 @@ function AdminView({onExit}) {
 
   const cancel=async(id)=>{
     if(!confirm("Annuler ce rendez-vous ?"))return;
+    const rdvAnn = rdvs.find(r=>r.id===id);
     await api.patch("rdvs",`id=eq.${id}`,{statut:"annulé"});
     setRdvs(p=>p.map(r=>r.id===id?{...r,statut:"annulé"}:r));
-    // Email annulation
-    const rdvAnn = rdvs.find(r=>r.id===id);
+    // Email annulation + ntfy
     if(rdvAnn) {
-      sendCancelEmail(rdvAnn);
-sendPush(`❌ Annulation − ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`, `${rdvAnn.prestation} · ${fmtLong(rdvAnn.date)} à ${rdvAnn.slot}`);
+      await Promise.all([
+        sendCancelEmail(rdvAnn),
+        sendPush(`❌ Annulation − ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`, `${rdvAnn.prestation} · ${fmtLong(rdvAnn.date)} à ${rdvAnn.slot}`),
+      ]);
     }
   };
 
@@ -1462,7 +1570,6 @@ sendPush(`❌ Annulation − ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`, `${r
     <div style={{display:"flex",gap:10,marginTop:4}}>
       <GBtn onClick={onExit}>Retour</GBtn>
       <PBtn onClick={async()=>{
-     
         // Vraie connexion Supabase
         if(!adminEmail || !adminPwd){
           alert("Renseigne ton email et mot de passe");
@@ -1745,13 +1852,68 @@ export default function App() {
   const [toast,setToast]=useState(null);
   const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
   const [showLoginModal,setShowLoginModal]=useState(false);
+  // FIX: gestion reset password
+  const [resetMode, setResetMode] = useState(false);
+  const [resetToken, setResetToken] = useState(null);
 
   const showToast=(msg,type="ok")=>{setToast({msg,type});setTimeout(()=>setToast(null),3500);};
 
+  // FIX: détecter à l'arrivée un lien de reset password
   useEffect(()=>{
+    const hash = window.location.hash || "";
+    const search = window.location.search || "";
+    // Supabase envoie le token dans le hash : #access_token=xxx&type=recovery&...
+    if(hash.includes("type=recovery") || search.includes("reset=1")){
+      // Parser le hash
+      const params = new URLSearchParams(hash.replace(/^#/, ""));
+      const accessToken = params.get("access_token");
+      const type = params.get("type");
+      if(accessToken && type === "recovery"){
+        setResetToken(accessToken);
+        setResetMode(true);
+        // Nettoyer l'URL pour éviter de retomber dedans
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+    }
+  },[]);
+
+  // FIX: vérifier la validité de la session cliente au démarrage + refresh si expirée
+  useEffect(()=>{
+    const init = async () => {
+      const saved=localStorage.getItem("nlb_sess");
+      if(!saved) return;
+      try {
+        const s = JSON.parse(saved);
+        // Si le token est expiré, on essaie de le refresh tout de suite
+        if(s.expires_at && s.expires_at * 1000 < Date.now()){
+          if(!s.refresh_token){
+            localStorage.removeItem("nlb_sess");
+            return;
+          }
+          const res = await api.refreshToken(s.refresh_token);
+          if(res.access_token){
+            const newSession = {
+              ...s,
+              token: res.access_token,
+              refresh_token: res.refresh_token || s.refresh_token,
+              expires_at: res.expires_at,
+            };
+            setSession(newSession);
+            localStorage.setItem("nlb_sess", JSON.stringify(newSession));
+          } else {
+            // Refresh failed → on supprime la session pour forcer une reconnexion
+            localStorage.removeItem("nlb_sess");
+          }
+        } else {
+          setSession(s);
+        }
+      } catch{
+        localStorage.removeItem("nlb_sess");
+      }
+    };
+    init();
+
     api.get("rdvs","select=*&order=date.asc").then(d=>{if(Array.isArray(d))setAllRdvs(d);});
-    const saved=localStorage.getItem("nlb_sess");
-    if(saved){try{setSession(JSON.parse(saved));}catch{}}
     const onStorage=()=>setLaserAccess(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
     window.addEventListener("storage",onStorage);
     return ()=>window.removeEventListener("storage",onStorage);
@@ -1787,7 +1949,7 @@ export default function App() {
         if(!s.refresh_token) return;
         const res = await api.refreshToken(s.refresh_token);
         if(res.access_token) {
-          const newSession = {...s, token: res.access_token, refresh_token: res.refresh_token||s.refresh_token};
+          const newSession = {...s, token: res.access_token, refresh_token: res.refresh_token||s.refresh_token, expires_at: res.expires_at};
           setSession(newSession);
           localStorage.setItem("nlb_sess", JSON.stringify(newSession));
         }
@@ -1798,6 +1960,13 @@ export default function App() {
   const handleBooked=(rdv)=>{setAllRdvs(p=>[...p,rdv]);setClientRdvs(p=>[...p,rdv]);setTab("mesrdvs");showToast("Rendez-vous confirmé !");};
   const handleLogout=async()=>{if(session?.token)await api.signOut(session.token);localStorage.removeItem("nlb_sess");setSession(null);setClientRdvs([]);showToast("Déconnecté·e");};
 
+  // FIX: callback pour mettre à jour la liste de RDV sans reload brutal
+  const handleRdvCancelled=(rdvId)=>{
+    setClientRdvs(p=>p.map(r=>r.id===rdvId?{...r,statut:"annulé"}:r));
+    setAllRdvs(p=>p.map(r=>r.id===rdvId?{...r,statut:"annulé"}:r));
+    showToast("Rendez-vous annulé");
+  };
+
   const [supaLaserAccess, setSupaLaserAccess] = useState(false);
   useEffect(()=>{
     if(!session) return;
@@ -1806,6 +1975,18 @@ export default function App() {
     });
   },[session]);
   const laserUnlocked=supaLaserAccess;
+
+  // FIX: si on est en mode reset password, on affiche que ça
+  if(resetMode && resetToken) return (
+    <div style={{minHeight:"100vh",background:C.bg}}>
+      <GS/>
+      <ResetPasswordView accessToken={resetToken} onDone={()=>{
+        setResetMode(false);
+        setResetToken(null);
+        showToast("Mot de passe modifié. Connectez-vous.");
+      }}/>
+    </div>
+  );
 
   if(view==="admin") return <div style={{minHeight:"100vh",background:C.bg}}><GS/>{toast&&<Toast {...toast}/>}<AdminView onExit={()=>setView("main")}/></div>;
 
@@ -1855,7 +2036,7 @@ export default function App() {
         {tab==="mesrdvs"&&(
           <div className="fu">
             <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,marginBottom:24}}>Mes rendez-vous</div>
-            {!session?<div style={{textAlign:"center",padding:"48px 0",color:C.textLight}}><div style={{fontSize:14,marginBottom:20}}>Connectez-vous pour voir vos rendez-vous.</div><PBtn onClick={()=>setTab("reserver")} style={{maxWidth:220,margin:"0 auto"}}>Réserver</PBtn></div>:<MesRdvsView rdvs={clientRdvs} loading={loadingRdvs}/>}
+            {!session?<div style={{textAlign:"center",padding:"48px 0",color:C.textLight}}><div style={{fontSize:14,marginBottom:20}}>Connectez-vous pour voir vos rendez-vous.</div><PBtn onClick={()=>setTab("reserver")} style={{maxWidth:220,margin:"0 auto"}}>Réserver</PBtn></div>:<MesRdvsView rdvs={clientRdvs} loading={loadingRdvs} session={session} onRdvCancelled={handleRdvCancelled}/>}
           </div>
         )}
 
