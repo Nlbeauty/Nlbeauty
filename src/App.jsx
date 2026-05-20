@@ -892,6 +892,31 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
     setConfirming(true);
     setConfirmError("");
     try {
+      // FIX CRITIQUE : recharger les RDV LIVE depuis Supabase juste avant de réserver
+      // pour s'assurer que personne d'autre n'a pris le même créneau entre-temps
+      const liveRdvs = await api.get("rdvs", `date=eq.${date}&statut=neq.annulé&select=slot,duree`);
+      if(Array.isArray(liveRdvs)){
+        const ALL = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+        const wantedIdx = ALL.indexOf(slot);
+        const wantedSlotsNeeded = Math.ceil((selPresta.duree||30)/30);
+        // Calculer tous les créneaux occupés par les RDV existants
+        for(const r of liveRdvs){
+          const rIdx = ALL.indexOf(r.slot);
+          if(rIdx === -1) continue;
+          const rEnd = rIdx + Math.ceil((r.duree||30)/30);
+          // Y a-t-il un chevauchement avec le créneau demandé ?
+          const wantedEnd = wantedIdx + wantedSlotsNeeded;
+          if(wantedIdx < rEnd && wantedEnd > rIdx){
+            setConfirmError("Désolée, ce créneau vient d'être réservé par quelqu'un d'autre. Choisissez-en un autre.");
+            // Rafraîchir la liste pour que l'UI se mette à jour
+            api.get("rdvs","select=*&order=date.asc").then(d=>{if(Array.isArray(d)&&onBooked){/* refresh externe */}});
+            setSlot(""); // forcer la cliente à choisir un nouveau créneau
+            setConfirming(false);
+            return;
+          }
+        }
+      }
+
       const rdv={
         user_id:sess.user.id,cat_id:svcId,service:svc.label,
         prestation:selPresta.nom,duree:selPresta.duree,
@@ -1338,6 +1363,24 @@ function AdminCreateRdvView({allRdvs, profs, onCreated}) {
 
     setSaving(true);
     try {
+      // FIX CRITIQUE : recharger les RDV LIVE depuis Supabase pour vérifier la disponibilité
+      const liveRdvs = await api.get("rdvs", `date=eq.${date}&statut=neq.annulé&select=slot,duree`);
+      if(Array.isArray(liveRdvs)){
+        const wantedIdx = ALL_SLOTS.indexOf(slot);
+        const wantedSlotsNeeded = Math.ceil((presta.duree||30)/30);
+        for(const r of liveRdvs){
+          const rIdx = ALL_SLOTS.indexOf(r.slot);
+          if(rIdx === -1) continue;
+          const rEnd = rIdx + Math.ceil((r.duree||30)/30);
+          const wantedEnd = wantedIdx + wantedSlotsNeeded;
+          if(wantedIdx < rEnd && wantedEnd > rIdx){
+            setMsg({type:"err", text:"Ce créneau vient d'être pris par quelqu'un d'autre. Rafraîchis et choisis-en un autre."});
+            setSaving(false);
+            return;
+          }
+        }
+      }
+
       const rdv = {
         user_id, cat_id: svcId, service: svc.label,
         prestation: presta.nom, duree: presta.duree,
@@ -1917,6 +1960,25 @@ export default function App() {
     const onStorage=()=>setLaserAccess(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
     window.addEventListener("storage",onStorage);
     return ()=>window.removeEventListener("storage",onStorage);
+  },[]);
+
+  // FIX CRITIQUE : rafraîchir allRdvs régulièrement et au focus pour éviter les doubles réservations
+  useEffect(()=>{
+    const refreshAllRdvs = () => {
+      api.get("rdvs","select=*&order=date.asc").then(d=>{if(Array.isArray(d))setAllRdvs(d);});
+    };
+    // Toutes les 30 secondes
+    const interval = setInterval(refreshAllRdvs, 30*1000);
+    // Quand l'utilisateur revient sur l'onglet (depuis un autre onglet/app)
+    const onVisible = () => { if(document.visibilityState === "visible") refreshAllRdvs(); };
+    document.addEventListener("visibilitychange", onVisible);
+    // Quand la fenêtre reprend le focus
+    window.addEventListener("focus", refreshAllRdvs);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", refreshAllRdvs);
+    };
   },[]);
 
   useEffect(()=>{
