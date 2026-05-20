@@ -1105,6 +1105,14 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
 
           </div>
 
+          <div style={{background:C.accentLight,border:`1px solid ${C.accent}`,borderRadius:12,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12}}>
+            <span style={{fontSize:20}}>💶</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:600,color:C.accentDark,marginBottom:2}}>Paiement uniquement en espèces</div>
+              <div style={{fontSize:11,color:C.textMid,lineHeight:1.5}}>Merci de prévoir l'appoint le jour du rendez-vous.</div>
+            </div>
+          </div>
+
           <PBtn onClick={()=>session?handleConfirm(session):setShowAuth(true)} disabled={confirming}>
             {confirming?"Confirmation en cours…":session?"Confirmer le rendez-vous":"Continuer pour confirmer"}
           </PBtn>
