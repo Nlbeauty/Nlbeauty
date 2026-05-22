@@ -573,7 +573,8 @@ function AuthModal({onAuth,onClose,booking}) {
 // ── DATE PICKER Option 1 : Calendrier + créneaux dessous ────────────────────
 function PlanityDatePicker({selPresta,allRdvs,allSupaBlocked,selectedDate,selectedSlot,onSelect}) {
   const ALL_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const SEMAINE = ["17:00","17:30","18:00","18:30","19:00"];
+  // ✏️ MODIFIÉ : créneaux semaine étendus de 17h à 20h (au lieu de 17h à 19h)
+  const SEMAINE = ["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const WEEKEND = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const DAYS_S = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
   const MONTHS_F = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
@@ -784,7 +785,8 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
 
   const svc=svcId?SERVICES.find(s=>s.id===svcId):null;
   const ALL_SLOTS_RES = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const SEMAINE_RES = ["17:00","17:30","18:00","18:30","19:00"];
+  // ✏️ MODIFIÉ : créneaux semaine étendus de 17h à 20h
+  const SEMAINE_RES = ["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const WEEKEND_RES = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const [supaBlocked, setSupaBlocked] = useState([]);
   const [allSupaBlocked, setAllSupaBlocked] = useState({}); // {date: [slots]}
@@ -972,7 +974,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
       <div style={{width:56,height:56,borderRadius:"50%",background:C.accentLight,border:`1.5px solid ${C.accent}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px",color:C.accentDark,fontSize:22}}>✓</div>
       <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.text,marginBottom:10}}>Rendez-vous confirmé</div>
       <div style={{fontSize:14,color:C.textMid,lineHeight:2,marginBottom:8}}>{done.prestation}<br/>{fmtLong(done.date)} à {done.slot}</div>
-      {done.acompte>0&&<div style={{fontSize:13,color:C.accentDark,fontWeight:500,marginBottom:20}}>Acompte {done.acompte} € réglé ✓</div>}
+      {/* ✏️ MODIFIÉ : suppression de l'affichage acompte côté confirmation cliente */}
       <div style={{fontSize:12,color:C.textLight,marginBottom:36,lineHeight:1.7}}>Un SMS de rappel vous sera envoyé 24h avant.</div>
       <AdresseBlock/>
       <GBtn onClick={()=>{setDone(null);setSvcId(null);setOpenSub(null);setSelPresta(null);setDate("");setSlot("");}}>Nouvelle réservation</GBtn>
@@ -1209,7 +1211,8 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled}) {
 // ── ADMIN ─────────────────────────────────────────────────────────────────────
 function PlanningAdmin() {
   const ALL_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const SEMAINE = ["17:00","17:30","18:00","18:30","19:00"];
+  // ✏️ MODIFIÉ : créneaux semaine étendus de 17h à 20h
+  const SEMAINE = ["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const WEEKEND = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const [selDate, setSelDate] = useState(todayStr());
   const [supaBlocked, setSupaBlocked] = useState([]);
@@ -1644,6 +1647,35 @@ function AdminView({onExit}) {
   const groupByDate=list=>{const g={};list.forEach(r=>{if(!g[r.date])g[r.date]=[];g[r.date].push(r);});return g;};
   const svcColor=(catId)=>SERVICES.find(s=>s.id===catId)?.color||C.accent;
 
+  // ✨ NOUVEAU : calcul du CA du mois en cours et de l'année en cours
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth(); // 0-11
+  const caMoisCourant = confirmes
+    .filter(r => {
+      const d = parseD(r.date);
+      return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+    })
+    .reduce((s, r) => s + (r.prix || 0), 0);
+  const caAnneeCourante = confirmes
+    .filter(r => parseD(r.date).getFullYear() === currentYear)
+    .reduce((s, r) => s + (r.prix || 0), 0);
+  const nbRdvAnneeCourante = confirmes.filter(r => parseD(r.date).getFullYear() === currentYear).length;
+
+  // ✨ NOUVEAU : calcul du CA mois par mois pour l'année en cours
+  const caParMois = (() => {
+    const tab = Array(12).fill(0).map((_,i) => ({mois:i, ca:0, nb:0}));
+    confirmes.forEach(r => {
+      const d = parseD(r.date);
+      if(d.getFullYear() === currentYear){
+        tab[d.getMonth()].ca += (r.prix || 0);
+        tab[d.getMonth()].nb += 1;
+      }
+    });
+    return tab;
+  })();
+  const caMaxMensuel = Math.max(...caParMois.map(m => m.ca), 1); // évite division par 0
+
   // Calcule si un RDV déclenche un palier de fidélité (pour le badge admin)
   const getPromoFor = (r) => {
     if(r.cat_id !== "ongles" && r.cat_id !== "spray") return null;
@@ -1710,21 +1742,31 @@ function AdminView({onExit}) {
             <div style={{fontSize:10,letterSpacing:2.5,textTransform:"uppercase",color:C.textLight,marginBottom:10}}>Administration</div>
             <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.text,letterSpacing:4,textTransform:"uppercase"}}>Neylika</div>
           </div>
-          <button onClick={onExit} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.textMid,padding:"8px 14px",fontSize:12,cursor:"pointer"}}>Quitter</button>
-          <button onClick={()=>{adminLogout();setIsUnlocked(false);setAdminEmail("");setAdminPwd("");}} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.textMid,padding:"8px 14px",fontSize:12,cursor:"pointer",marginLeft:8}}>Déconnexion</button>
+          <div style={{display:"flex",gap:8,flexShrink:0}}>
+            <button onClick={onExit} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.textMid,padding:"8px 14px",fontSize:12,cursor:"pointer"}}>Quitter</button>
+            <button onClick={()=>{adminLogout();setIsUnlocked(false);setAdminEmail("");setAdminPwd("");}} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.textMid,padding:"8px 14px",fontSize:12,cursor:"pointer"}}>Déconnexion</button>
+          </div>
         </div>
+
+        {/* ✨ NOUVEAU : bandeau CA mois / CA année / nb RDV année */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:24}}>
-          {[[confirmes.length,"RDV"],[confirmes.reduce((s,r)=>s+r.prix,0)+" €","CA"],[confirmes.reduce((s,r)=>s+r.acompte,0)+" €","Acomptes"]].map(([v,l],i)=>(
-            <div key={i} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 14px",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
-              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:4}}>{v}</div>
-              <div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight}}>{l}</div>
-            </div>
-          ))}
+          <div style={{background:`linear-gradient(135deg, ${C.accentLight}, ${C.surface})`,border:`1.5px solid ${C.accent}`,borderRadius:12,padding:"16px 14px",boxShadow:"0 2px 10px rgba(201,160,192,.15)"}}>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:4,fontWeight:600}}>{caMoisCourant} €</div>
+            <div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.accent,fontWeight:600}}>CA {MONTHS[currentMonth]}</div>
+          </div>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 14px",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:4}}>{caAnneeCourante} €</div>
+            <div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight}}>CA {currentYear}</div>
+          </div>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 14px",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:4}}>{nbRdvAnneeCourante}</div>
+            <div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight}}>RDV {currentYear}</div>
+          </div>
         </div>
       </div>
 
       <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,marginBottom:24,overflowX:"auto"}}>
-        {[["today","Aujourd'hui"],["upcoming","À venir"],["all","Tous"],["create","+ Créer RDV"],["planning","Planning"],["laser","Laser 🔒"]].map(([id,label])=>(
+        {[["today","Aujourd'hui"],["upcoming","À venir"],["all","Tous"],["create","+ Créer RDV"],["planning","Planning"],["ca","CA mensuel"],["laser","Laser 🔒"]].map(([id,label])=>(
           <button key={id} onClick={()=>setTab(id)} style={{flexShrink:0,padding:"11px 10px",background:"none",border:"none",borderBottom:`2px solid ${tab===id?C.accent:"transparent"}`,color:tab===id?C.accentDark:C.textLight,fontSize:11,fontWeight:tab===id?600:400,marginBottom:-1,letterSpacing:.3,cursor:"pointer"}}>{label}</button>
         ))}
       </div>
@@ -1768,6 +1810,58 @@ function AdminView({onExit}) {
       )}
       {!loading&&tab==="planning"&&(
         <PlanningAdmin/>
+      )}
+      {/* ✨ NOUVEAU : onglet CA mensuel détaillé */}
+      {!loading&&tab==="ca"&&(
+        <div>
+          <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:6}}>Chiffre d'affaires {currentYear}</div>
+          <div style={{fontSize:12,color:C.textLight,marginBottom:24}}>Détail mois par mois — uniquement les RDV confirmés</div>
+
+          {/* Récap année */}
+          <div style={{background:`linear-gradient(135deg, ${C.accentLight}, ${C.surface})`,border:`1.5px solid ${C.accent}`,borderRadius:14,padding:"18px 20px",marginBottom:24,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.accent,fontWeight:600,marginBottom:4}}>Total {currentYear}</div>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.text,fontWeight:600}}>{caAnneeCourante} €</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight,marginBottom:4}}>RDV</div>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.textMid,fontWeight:500}}>{nbRdvAnneeCourante}</div>
+            </div>
+          </div>
+
+          {/* Liste mois par mois */}
+          {caParMois.map(m => {
+            const isCurrent = m.mois === currentMonth;
+            const isFuture = m.mois > currentMonth;
+            const pct = (m.ca / caMaxMensuel) * 100;
+            return (
+              <div key={m.mois} style={{
+                marginBottom:14,
+                padding:"14px 16px",
+                background:isCurrent?C.accentLight:C.surface,
+                border:`1px solid ${isCurrent?C.accent:C.border}`,
+                borderRadius:12,
+                opacity:isFuture && m.ca===0 ? 0.4 : 1,
+              }}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:14,fontWeight:isCurrent?700:500,color:isCurrent?C.accentDark:C.text}}>{MONTHS[m.mois]}</span>
+                    {isCurrent && <span style={{fontSize:9,background:C.accent,color:"#fff",padding:"2px 7px",borderRadius:8,letterSpacing:.5,fontWeight:600}}>EN COURS</span>}
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontSize:16,fontWeight:700,color:isCurrent?C.accentDark:C.text}}>{m.ca} €</div>
+                    <div style={{fontSize:11,color:C.textLight,marginTop:1}}>{m.nb} RDV</div>
+                  </div>
+                </div>
+                {m.ca > 0 && (
+                  <div style={{height:4,background:C.surfaceAlt,borderRadius:4,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:`${pct}%`,background:isCurrent?C.accent:C.accentDark,borderRadius:4,transition:"width .8s ease"}}/>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
       {!loading&&tab==="laser"&&(
         <div>
