@@ -1660,16 +1660,24 @@ function AdminView({onExit}) {
   const caAnneeCourante = confirmes
     .filter(r => parseD(r.date).getFullYear() === currentYear)
     .reduce((s, r) => s + (r.prix || 0), 0);
-  const nbRdvAnneeCourante = confirmes.filter(r => parseD(r.date).getFullYear() === currentYear).length;
+  // ✏️ MODIFIÉ : nb de RDV à venir (date >= aujourd'hui) au lieu du total de l'année
+  const nbRdvAVenir = confirmes.filter(r => r.date >= todayStr()).length;
 
   // ✨ NOUVEAU : calcul du CA mois par mois pour l'année en cours
+  // ✏️ MODIFIÉ : on inclut aussi le mois prochain même s'il bascule sur l'année suivante
   const caParMois = (() => {
     const tab = Array(12).fill(0).map((_,i) => ({mois:i, ca:0, nb:0}));
     confirmes.forEach(r => {
       const d = parseD(r.date);
+      // Mois de l'année courante
       if(d.getFullYear() === currentYear){
         tab[d.getMonth()].ca += (r.prix || 0);
         tab[d.getMonth()].nb += 1;
+      }
+      // Cas spécial : si on est en décembre, on inclut janvier de l'année suivante
+      else if(currentMonth === 11 && d.getFullYear() === currentYear + 1 && d.getMonth() === 0){
+        tab[0].ca += (r.prix || 0);
+        tab[0].nb += 1;
       }
     });
     return tab;
@@ -1759,8 +1767,8 @@ function AdminView({onExit}) {
             <div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight}}>CA {currentYear}</div>
           </div>
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 14px",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
-            <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:4}}>{nbRdvAnneeCourante}</div>
-            <div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight}}>RDV {currentYear}</div>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:4}}>{nbRdvAVenir}</div>
+            <div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight}}>RDV à venir</div>
           </div>
         </div>
       </div>
@@ -1824,15 +1832,17 @@ function AdminView({onExit}) {
               <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.text,fontWeight:600}}>{caAnneeCourante} €</div>
             </div>
             <div style={{textAlign:"right"}}>
-              <div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight,marginBottom:4}}>RDV</div>
-              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.textMid,fontWeight:500}}>{nbRdvAnneeCourante}</div>
+              <div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight,marginBottom:4}}>RDV à venir</div>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.textMid,fontWeight:500}}>{nbRdvAVenir}</div>
             </div>
           </div>
 
-          {/* Liste mois par mois */}
-          {caParMois.map(m => {
+          {/* ✏️ MODIFIÉ : on n'affiche que le mois en cours et le mois à venir */}
+          {caParMois
+            .filter(m => m.mois === currentMonth || m.mois === (currentMonth + 1) % 12)
+            .map(m => {
             const isCurrent = m.mois === currentMonth;
-            const isFuture = m.mois > currentMonth;
+            const isNext = m.mois === (currentMonth + 1) % 12;
             const pct = (m.ca / caMaxMensuel) * 100;
             return (
               <div key={m.mois} style={{
@@ -1841,12 +1851,12 @@ function AdminView({onExit}) {
                 background:isCurrent?C.accentLight:C.surface,
                 border:`1px solid ${isCurrent?C.accent:C.border}`,
                 borderRadius:12,
-                opacity:isFuture && m.ca===0 ? 0.4 : 1,
               }}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                   <div style={{display:"flex",alignItems:"center",gap:8}}>
                     <span style={{fontSize:14,fontWeight:isCurrent?700:500,color:isCurrent?C.accentDark:C.text}}>{MONTHS[m.mois]}</span>
                     {isCurrent && <span style={{fontSize:9,background:C.accent,color:"#fff",padding:"2px 7px",borderRadius:8,letterSpacing:.5,fontWeight:600}}>EN COURS</span>}
+                    {isNext && <span style={{fontSize:9,background:C.border,color:C.textMid,padding:"2px 7px",borderRadius:8,letterSpacing:.5,fontWeight:600}}>À VENIR</span>}
                   </div>
                   <div style={{textAlign:"right"}}>
                     <div style={{fontSize:16,fontWeight:700,color:isCurrent?C.accentDark:C.text}}>{m.ca} €</div>
