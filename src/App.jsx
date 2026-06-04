@@ -1098,7 +1098,7 @@ function AdminView({onExit}) {
     }
     setEditingId(null);setEditSaving(false);
   };
-  const Row=({r})=>{
+  const Row=({r,allRdvsAdmin})=>{
     const isEditing=editingId===r.id;
     const smsUrl=`sms:${r.client_tel}`;
     return (
@@ -1116,7 +1116,6 @@ function AdminView({onExit}) {
             {r.statut!=="annulé"&&<button onClick={()=>{setEditingId(isEditing?null:r.id);setEditPrix(String(r.prix));setEditPresta(r.prestation);setEditDate(r.date);setEditSlot(r.slot);}} style={{fontSize:11,color:C.textLight,background:"none",border:`1px solid ${C.border}`,borderRadius:7,padding:"3px 8px",cursor:"pointer"}}>{isEditing?"✕":"✏️"}</button>}
           </div>
         </div>
-        {/* Mode édition */}
         {isEditing&&(
           <div style={{marginTop:10,padding:"12px 14px",background:C.surfaceAlt,borderRadius:10,border:`1px solid ${C.border}`}}>
             <div style={{fontSize:11,color:C.textLight,marginBottom:8,letterSpacing:1,textTransform:"uppercase"}}>Modifier le RDV</div>
@@ -1136,7 +1135,7 @@ function AdminView({onExit}) {
               <div style={{fontSize:11,color:C.textLight,marginBottom:6}}>Créneau</div>
               <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
                 {ALL_SLOTS_ADMIN.map(s=>{
-                  const isTakenByOther=rdvs.some(x=>x.date===editDate&&x.slot===s&&x.statut!=="annulé"&&x.id!==r.id);
+                  const isTakenByOther=(allRdvsAdmin||[]).some(x=>x.date===editDate&&x.slot===s&&x.statut!=="annulé"&&x.id!==r.id);
                   const active=editSlot===s;
                   return(<div key={s} onClick={()=>!isTakenByOther&&setEditSlot(s)} style={{padding:"7px 2px",textAlign:"center",borderRadius:6,border:`1px solid ${active?C.accent:isTakenByOther?C.borderLight:C.border}`,background:active?C.accent:isTakenByOther?C.surfaceAlt:C.surface,color:active?"#fff":isTakenByOther?C.borderLight:C.textMid,fontSize:11,cursor:isTakenByOther?"default":"pointer",textDecoration:isTakenByOther?"line-through":"none"}}>{s}</div>);
                 })}
@@ -1174,9 +1173,9 @@ function AdminView({onExit}) {
         {[["today","Aujourd'hui"],["upcoming","À venir"],["all","Tous"],["create","+ Créer RDV"],["planning","Planning"],["ca","CA mensuel"],["laser","Laser 🔒"]].map(([id,label])=>(<button key={id} onClick={()=>setTab(id)} style={{flexShrink:0,padding:"11px 10px",background:"none",border:"none",borderBottom:`2px solid ${tab===id?C.accent:"transparent"}`,color:tab===id?C.accentDark:C.textLight,fontSize:11,fontWeight:tab===id?600:400,marginBottom:-1,letterSpacing:.3,cursor:"pointer"}}>{label}</button>))}
       </div>
       {loading&&<div style={{textAlign:"center",padding:40,color:C.textLight}}>Chargement…</div>}
-      {!loading&&tab==="today"&&(<div><div style={{fontSize:12,color:C.textLight,marginBottom:16}}>{fmtLong(todayStr())}</div>{todayRdvs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous aujourd'hui.</div>:todayRdvs.map(r=><Row key={r.id} r={r}/>)}</div>)}
-      {!loading&&tab==="upcoming"&&(<div>{upcoming.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous à venir.</div>:Object.entries(groupByDate(upcoming)).map(([d,list])=>(<div key={d} style={{marginBottom:28}}><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>{fmtLong(d)}</div>{list.map(r=><Row key={r.id} r={r}/>)}</div>))}</div>)}
-      {!loading&&tab==="all"&&(<div>{rdvs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous.</div>:Object.entries(groupByDate([...rdvs].sort((a,b)=>b.date.localeCompare(a.date)))).map(([d,list])=>(<div key={d} style={{marginBottom:28}}><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>{fmtLong(d)}</div>{list.map(r=><Row key={r.id} r={r}/>)}</div>))}</div>)}
+      {!loading&&tab==="today"&&(<div><div style={{fontSize:12,color:C.textLight,marginBottom:16}}>{fmtLong(todayStr())}</div>{todayRdvs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous aujourd'hui.</div>:todayRdvs.map(r=><Row key={r.id} r={r} allRdvsAdmin={rdvs}/>)}</div>)}
+      {!loading&&tab==="upcoming"&&(<div>{upcoming.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous à venir.</div>:Object.entries(groupByDate(upcoming)).map(([d,list])=>(<div key={d} style={{marginBottom:28}}><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>{fmtLong(d)}</div>{list.map(r=><Row key={r.id} r={r} allRdvsAdmin={rdvs}/>)}</div>))}</div>)}
+      {!loading&&tab==="all"&&(<div>{rdvs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous.</div>:Object.entries(groupByDate([...rdvs].sort((a,b)=>b.date.localeCompare(a.date)))).map(([d,list])=>(<div key={d} style={{marginBottom:28}}><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>{fmtLong(d)}</div>{list.map(r=><Row key={r.id} r={r} allRdvsAdmin={rdvs}/>)}</div>))}</div>)}
       {!loading&&tab==="create"&&(<AdminCreateRdvView allRdvs={rdvs} profs={profs} onCreated={(saved)=>{setRdvs(p=>[...p,saved]);setTab("today");}}/>)}
       {!loading&&tab==="planning"&&(<PlanningAdmin/>)}
       {!loading&&tab==="ca"&&(
