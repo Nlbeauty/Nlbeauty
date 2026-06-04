@@ -1048,6 +1048,35 @@ function AdminView({onExit}) {
     await api.patch("rdvs",`id=eq.${id}`,{statut:"annulé"});setRdvs(p=>p.map(r=>r.id===id?{...r,statut:"annulé"}:r));
     if(rdvAnn)await Promise.all([sendCancelEmail(rdvAnn),sendPush(`❌ Annulation − ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`,`${rdvAnn.prestation} · ${fmtLong(rdvAnn.date)} à ${rdvAnn.slot}`)]);
   };
+
+  // États édition — doivent être AVANT tout return conditionnel
+  const [editingId,setEditingId]=useState(null);
+  const [editPrix,setEditPrix]=useState("");
+  const [editPresta,setEditPresta]=useState("");
+  const [editDate,setEditDate]=useState("");
+  const [editSlot,setEditSlot]=useState("");
+  const [editSaving,setEditSaving]=useState(false);
+  const ALL_SLOTS_ADMIN=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const saveEdit=async(r)=>{
+    setEditSaving(true);
+    const body={};
+    if(editPresta.trim()&&editPresta.trim()!==r.prestation) body.prestation=editPresta.trim();
+    const p=parseFloat(editPrix);
+    if(!isNaN(p)&&p!==r.prix) body.prix=p;
+    if(editDate&&editDate!==r.date) body.date=editDate;
+    if(editSlot&&editSlot!==r.slot) body.slot=editSlot;
+    if(Object.keys(body).length>0){
+      await api.patch("rdvs",`id=eq.${r.id}`,body);
+      setRdvs(prev=>prev.map(x=>x.id===r.id?{...x,...body}:x));
+      if(body.date||body.slot){
+        const nd=body.date||r.date;const ns=body.slot||r.slot;
+        await sendPush(`✏️ Déplacé (admin) − ${r.client_prenom} ${r.client_nom}`,`${r.prestation} · ${fmtLong(nd)} à ${ns}`);
+        if(r.client_email) await sendEmails({...r,...body},r.client_email);
+      }
+    }
+    setEditingId(null);setEditSaving(false);
+  };
+
   if(!isUnlocked) return (
     <div className="fu" style={{padding:"0 20px",maxWidth:360,margin:"0 auto",paddingTop:60}}>
       <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,color:C.text,marginBottom:8}}>Administration</div>
@@ -1070,34 +1099,6 @@ function AdminView({onExit}) {
   const caParMois=(()=>{const tab=Array(12).fill(0).map((_,i)=>({mois:i,ca:0,nb:0}));confirmes.forEach(r=>{const d=parseD(r.date);if(d.getFullYear()===currentYear){tab[d.getMonth()].ca+=(r.prix||0);tab[d.getMonth()].nb+=1;}else if(currentMonth===11&&d.getFullYear()===currentYear+1&&d.getMonth()===0){tab[0].ca+=(r.prix||0);tab[0].nb+=1;}});return tab;})();
   const caMaxMensuel=Math.max(...caParMois.map(m=>m.ca),1);
   const getPromoFor=(r)=>{if(r.cat_id!=="ongles"&&r.cat_id!=="spray")return null;if(r.statut!=="confirmé")return null;const sameClient=(x)=>r.user_id?x.user_id===r.user_id:x.client_tel===r.client_tel;const allSame=rdvs.filter(x=>x.cat_id===r.cat_id&&x.statut==="confirmé"&&sameClient(x)).sort((a,b)=>(a.date+a.slot).localeCompare(b.date+b.slot));const idx=allSame.findIndex(x=>x.id===r.id);if(idx===-1)return null;const nb=idx+1;const cycle=nb%10;if(cycle===0)return{remise:10,nb};if(cycle===5)return{remise:5,nb};return null;};
-  const [editingId,setEditingId]=useState(null);
-  const [editPrix,setEditPrix]=useState("");
-  const [editPresta,setEditPresta]=useState("");
-  const [editDate,setEditDate]=useState("");
-  const [editSlot,setEditSlot]=useState("");
-  const [editSaving,setEditSaving]=useState(false);
-  const ALL_SLOTS_ADMIN=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const saveEdit=async(r)=>{
-    setEditSaving(true);
-    const body={};
-    if(editPresta.trim()&&editPresta.trim()!==r.prestation) body.prestation=editPresta.trim();
-    const p=parseFloat(editPrix);
-    if(!isNaN(p)&&p!==r.prix) body.prix=p;
-    if(editDate&&editDate!==r.date) body.date=editDate;
-    if(editSlot&&editSlot!==r.slot) body.slot=editSlot;
-    if(Object.keys(body).length>0){
-      await api.patch("rdvs",`id=eq.${r.id}`,body);
-      setRdvs(prev=>prev.map(x=>x.id===r.id?{...x,...body}:x));
-      // Notif push si date ou slot changé
-      if(body.date||body.slot){
-        const nd=body.date||r.date;const ns=body.slot||r.slot;
-        await sendPush(`✏️ Déplacé (admin) − ${r.client_prenom} ${r.client_nom}`,`${r.prestation} · ${fmtLong(nd)} à ${ns}`);
-        // Email confirmation avec nouveau créneau
-        await sendEmails({...r,...body},r.client_email);
-      }
-    }
-    setEditingId(null);setEditSaving(false);
-  };
   const Row=({r,allRdvsAdmin})=>{
     const isEditing=editingId===r.id;
     const smsUrl=`sms:${r.client_tel}`;
