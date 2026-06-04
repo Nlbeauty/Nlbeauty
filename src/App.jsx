@@ -1222,6 +1222,7 @@ export default function App() {
   const [toast,setToast]=useState(null);const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
   const [showLoginModal,setShowLoginModal]=useState(false);const [resetMode,setResetMode]=useState(false);const [resetToken,setResetToken]=useState(null);
   const [showSprayConseils,setShowSprayConseils]=useState(false);
+  const [showMentions,setShowMentions]=useState(false);
   const showToast=(msg,type="ok")=>{setToast({msg,type});setTimeout(()=>setToast(null),3500);};
   useEffect(()=>{
     const hash=window.location.hash||"";const search=window.location.search||"";
@@ -1337,6 +1338,34 @@ export default function App() {
           </div>
         )}
       </div>
+      {/* Lien mentions légales */}
+      <div style={{textAlign:"center",padding:"12px",marginTop:40,borderTop:"1px solid rgba(200,169,154,0.15)"}}>
+        <span onClick={()=>setShowMentions(true)} style={{fontSize:10,color:"rgba(200,169,154,0.4)",cursor:"pointer",letterSpacing:"0.05em"}}>
+          Mentions légales &amp; CGV
+        </span>
+      </div>
+      {/* Modale mentions légales */}
+      {showMentions&&(
+        <div className="fi" onClick={()=>setShowMentions(false)} style={{position:"fixed",inset:0,zIndex:700,background:"rgba(0,0,0,.6)",backdropFilter:"blur(6px)",display:"flex",alignItems:"flex-end",justifyContent:"center"}}>
+          <div className="su" onClick={e=>e.stopPropagation()} style={{width:"100%",maxWidth:520,maxHeight:"85vh",overflowY:"auto",background:"#1a1020",borderRadius:"20px 20px 0 0",padding:"28px 24px 48px",boxShadow:"0 -8px 40px rgba(0,0,0,.3)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24}}>
+              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:"#C8A99A",letterSpacing:.5}}>Mentions légales &amp; CGV</div>
+              <button onClick={()=>setShowMentions(false)} style={{background:"none",border:"none",color:"rgba(200,169,154,0.5)",fontSize:22,cursor:"pointer",lineHeight:1}}>✕</button>
+            </div>
+            {[
+              {titre:"Éditeur du site",contenu:"EL RAKAAWI Nevine — NEYLIKA\n9 rue André Savès, 31300 Toulouse\nnlbeauty31@gmail.com"},
+              {titre:"Hébergement",contenu:"Vercel Inc.\n340 Pine Street, Suite 701\nSan Francisco, CA 94104, USA\nvercel.com"},
+              {titre:"Protection des données (RGPD)",contenu:"Les données collectées (nom, prénom, email, téléphone) sont utilisées uniquement pour la gestion des réservations. Aucune donnée n'est transmise à des tiers. Pour exercer vos droits d'accès, de rectification ou de suppression, contactez : nlbeauty31@gmail.com"},
+              {titre:"Conditions Générales de Vente",contenu:"Paiement : uniquement en espèces, le jour du rendez-vous.\n\nAnnulation : possible jusqu'à 24h avant le rendez-vous via votre espace personnel. Passé ce délai, le rendez-vous est dû.\n\nNo-show : tout rendez-vous manqué sans annulation préalable répétée pourra entraîner un refus de réservation future."},
+            ].map(({titre,contenu})=>(
+              <div key={titre} style={{marginBottom:20,paddingBottom:20,borderBottom:"1px solid rgba(200,169,154,0.1)"}}>
+                <div style={{fontSize:11,letterSpacing:2,textTransform:"uppercase",color:"#C8A99A",marginBottom:8,fontWeight:600}}>{titre}</div>
+                <div style={{fontSize:13,color:"rgba(200,169,154,0.7)",lineHeight:1.7,whiteSpace:"pre-line"}}>{contenu}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{position:"fixed",bottom:0,left:0,right:0,background:C.surface,borderTop:`1px solid ${C.border}`,display:"flex",boxShadow:"0 -4px 18px rgba(0,0,0,.05)"}}>
         {[["reserver","Réserver"],["mesrdvs","Mes RDV"],["compte","Compte"]].map(([id,label])=>(<button key={id} onClick={()=>{setTab(id);setShowSprayConseils(false);}} style={{flex:1,padding:"14px 8px 20px",background:"none",border:"none",color:tab===id?C.accentDark:C.textLight,fontSize:11,letterSpacing:1.5,textTransform:"uppercase",fontWeight:tab===id?600:400,cursor:"pointer",position:"relative",transition:"color .2s"}}>{label}{tab===id&&<div style={{position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",width:24,height:2,background:C.accent,borderRadius:1}}/>}</button>))}
         <button onClick={()=>setView("admin")} style={{padding:"14px 16px 20px",background:"none",border:"none",color:C.borderLight,fontSize:10,letterSpacing:1,cursor:"pointer"}}>⚙</button>
