@@ -760,6 +760,59 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
   );
 }
 
+// ── MODIFY PICKER — défini hors de MesRdvsView pour respecter les règles React ──
+function ModifyPicker({rdv, newDate, setNewDate, newSlot, setNewSlot, modifyDone, modifyError, modifying, handleModify, onClose, getAvailSlotsModify}) {
+  const DAYS_S_M=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+  const MONTHS_M=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+  const DAYS_L_M=["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+  const today=new Date();const minDate=new Date(today.getTime()+24*60*60*1000);const minDateStr=minDate.toISOString().split("T")[0];
+  const [yr,setYr]=useState(today.getFullYear());const [mo,setMo]=useState(today.getMonth());
+  const firstDayOfMonth=(new Date(yr,mo,1).getDay()||7)-1;const daysInMonth=new Date(yr,mo+1,0).getDate();
+  const maxDate=new Date(today.getTime()+49*24*60*60*1000);const maxYr=maxDate.getFullYear();const maxMo=maxDate.getMonth();
+  const nextDisabled=(yr>maxYr)||(yr===maxYr&&mo>=maxMo);const prevDisabled=(yr<today.getFullYear())||(yr===today.getFullYear()&&mo<=today.getMonth());
+  const availSlots=newDate?getAvailSlotsModify(newDate,rdv):[];
+  if(modifyDone)return <div style={{textAlign:"center",padding:"20px 0",color:"#a0c090",fontSize:14,fontWeight:600}}>✓ Rendez-vous déplacé ! Un email de confirmation vous a été envoyé.</div>;
+  return (
+    <div style={{marginTop:12,padding:"14px",background:C.surfaceAlt,borderRadius:12,border:`1px solid ${C.border}`}}>
+      <div style={{fontSize:11,color:C.textLight,marginBottom:12,letterSpacing:1,textTransform:"uppercase"}}>Choisir un nouveau créneau</div>
+      <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 12px",marginBottom:12}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+          <button onClick={()=>{if(prevDisabled)return;mo===0?(setMo(11),setYr(yr-1)):setMo(mo-1);}} disabled={prevDisabled} style={{background:"none",border:"none",color:prevDisabled?C.borderLight:C.textLight,fontSize:20,cursor:prevDisabled?"default":"pointer",padding:"0 6px",opacity:prevDisabled?.3:1}}>‹</button>
+          <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:15,color:C.text}}>{MONTHS_M[mo]} {yr}</span>
+          <button onClick={()=>{if(nextDisabled)return;mo===11?(setMo(0),setYr(yr+1)):setMo(mo+1);}} disabled={nextDisabled} style={{background:"none",border:"none",color:nextDisabled?C.borderLight:C.textLight,fontSize:20,cursor:nextDisabled?"default":"pointer",padding:"0 6px",opacity:nextDisabled?.3:1}}>›</button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:6}}>
+          {DAYS_S_M.map(d=><div key={d} style={{textAlign:"center",fontSize:9,color:C.textLight,fontWeight:500,letterSpacing:.5,textTransform:"uppercase",paddingBottom:6}}>{d}</div>)}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"3px 0"}}>
+          {Array(firstDayOfMonth).fill(null).map((_,i)=><div key={`e${i}`}/>)}
+          {Array(daysInMonth).fill(null).map((_,i)=>{
+            const d=i+1;const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+            const isPast=ds<minDateStr;const avail=!isPast?getAvailSlotsModify(ds,rdv):[];const hasDispo=avail.length>0;const isSel=ds===newDate;
+            return(<div key={d} onClick={()=>{if(hasDispo&&!isPast){setNewDate(ds);setNewSlot("");}}} style={{textAlign:"center",padding:"7px 2px",borderRadius:6,cursor:hasDispo&&!isPast?"pointer":"default",background:isSel?C.accent:"transparent",color:isSel?"#fff":isPast||!hasDispo?"#3a3040":C.text,fontWeight:isSel?700:400,fontSize:12,position:"relative"}}>
+              {d}{hasDispo&&!isSel&&<div style={{width:3,height:3,borderRadius:"50%",background:C.accent,position:"absolute",bottom:1,left:"50%",transform:"translateX(-50%)"}}/>}
+            </div>);
+          })}
+        </div>
+      </div>
+      {newDate&&availSlots.length>0&&(
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:11,color:C.textMid,marginBottom:8}}>{DAYS_L_M[parseD(newDate).getDay()]} {parseD(newDate).getDate()} {MONTHS_M[parseD(newDate).getMonth()]}</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+            {availSlots.map(s=>{const active=newSlot===s;return(<div key={s} onClick={()=>setNewSlot(s)} style={{padding:"10px 4px",textAlign:"center",borderRadius:8,border:`1.5px solid ${active?C.accent:C.border}`,background:active?C.accent:C.surface,color:active?"#fff":C.textMid,fontSize:12,fontWeight:active?700:400,cursor:"pointer"}}>{s}</div>);})}
+          </div>
+        </div>
+      )}
+      {newDate&&availSlots.length===0&&<div style={{fontSize:12,color:C.textLight,marginBottom:12,textAlign:"center"}}>Aucun créneau disponible ce jour.</div>}
+      {modifyError&&<div style={{fontSize:12,color:"#f08080",marginBottom:10,padding:"8px 12px",background:"#2a1010",border:"1px solid #5a2020",borderRadius:8}}>{modifyError}</div>}
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:8,border:`1px solid ${C.border}`,background:"none",color:C.textMid,fontSize:12,cursor:"pointer"}}>Fermer</button>
+        <button onClick={handleModify} disabled={!newDate||!newSlot||modifying} style={{flex:2,padding:"9px",borderRadius:8,border:"none",background:(!newDate||!newSlot||modifying)?C.border:`linear-gradient(135deg,#c9a0c0,#7a4878)`,color:(!newDate||!newSlot||modifying)?C.textLight:"#fff",fontSize:12,fontWeight:600,cursor:(!newDate||!newSlot||modifying)?"default":"pointer"}}>{modifying?"Déplacement…":"Confirmer le déplacement"}</button>
+      </div>
+    </div>
+  );
+}
+
 function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}) {
   const up=rdvs.filter(r=>r.date>=todayStr()&&r.statut!=="annulé").sort((a,b)=>a.date.localeCompare(b.date));
   const past=rdvs.filter(r=>r.date<todayStr()||r.statut==="annulé").sort((a,b)=>b.date.localeCompare(a.date));
@@ -817,7 +870,6 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
     setModifying(true);setModifyError("");
     try{
       const token=session?.token;if(!token){setModifyError("Session expirée.");setModifying(false);return;}
-      // Vérification live anti-doublon
       const liveRdvs=await api.get("rdvs",`date=eq.${newDate}&statut=neq.annulé&select=id,slot,duree`);
       if(Array.isArray(liveRdvs)){
         const wantedIdx=ALL_SLOTS.indexOf(newSlot);const slotsNeeded=Math.ceil((modifyingRdv.duree||30)/30);
@@ -831,7 +883,6 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
       const res=await api.patch("rdvs",`id=eq.${modifyingRdv.id}`,{date:newDate,slot:newSlot},token);
       const updated=Array.isArray(res)?res[0]:res;
       if(!updated||updated.error){setModifyError("Impossible de modifier. Contactez-nous.");setModifying(false);return;}
-      // Email confirmation nouveau créneau + notif push
       const rdvUpdated={...modifyingRdv,date:newDate,slot:newSlot};
       await Promise.all([
         sendEmails(rdvUpdated,session.user.email),
@@ -857,61 +908,6 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
     setCancelling(false);
   };
 
-  // Petit calendrier inline pour la modification
-  const ModifyPicker=({rdv})=>{
-    const DAYS_S_M=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
-    const MONTHS_M=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
-    const DAYS_L_M=["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
-    const today=new Date();const minDate=new Date(today.getTime()+24*60*60*1000);const minDateStr=minDate.toISOString().split("T")[0];
-    const [yr,setYr]=useState(today.getFullYear());const [mo,setMo]=useState(today.getMonth());
-    const firstDayOfMonth=(new Date(yr,mo,1).getDay()||7)-1;const daysInMonth=new Date(yr,mo+1,0).getDate();
-    const maxDate=new Date(today.getTime()+49*24*60*60*1000);const maxYr=maxDate.getFullYear();const maxMo=maxDate.getMonth();
-    const nextDisabled=(yr>maxYr)||(yr===maxYr&&mo>=maxMo);const prevDisabled=(yr<today.getFullYear())||(yr===today.getFullYear()&&mo<=today.getMonth());
-    const availSlots=newDate?getAvailSlotsModify(newDate,rdv):[];
-    if(modifyDone)return <div style={{textAlign:"center",padding:"20px 0",color:"#a0c090",fontSize:14,fontWeight:600}}>✓ Rendez-vous déplacé ! Un email de confirmation vous a été envoyé.</div>;
-    return (
-      <div style={{marginTop:12,padding:"14px",background:C.surfaceAlt,borderRadius:12,border:`1px solid ${C.border}`}}>
-        <div style={{fontSize:11,color:C.textLight,marginBottom:12,letterSpacing:1,textTransform:"uppercase"}}>Choisir un nouveau créneau</div>
-        {/* Calendrier */}
-        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 12px",marginBottom:12}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-            <button onClick={()=>{if(prevDisabled)return;mo===0?(setMo(11),setYr(yr-1)):setMo(mo-1);}} disabled={prevDisabled} style={{background:"none",border:"none",color:prevDisabled?C.borderLight:C.textLight,fontSize:20,cursor:prevDisabled?"default":"pointer",padding:"0 6px",opacity:prevDisabled?.3:1}}>‹</button>
-            <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:15,color:C.text}}>{MONTHS_M[mo]} {yr}</span>
-            <button onClick={()=>{if(nextDisabled)return;mo===11?(setMo(0),setYr(yr+1)):setMo(mo+1);}} disabled={nextDisabled} style={{background:"none",border:"none",color:nextDisabled?C.borderLight:C.textLight,fontSize:20,cursor:nextDisabled?"default":"pointer",padding:"0 6px",opacity:nextDisabled?.3:1}}>›</button>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:6}}>
-            {DAYS_S_M.map(d=><div key={d} style={{textAlign:"center",fontSize:9,color:C.textLight,fontWeight:500,letterSpacing:.5,textTransform:"uppercase",paddingBottom:6}}>{d}</div>)}
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"3px 0"}}>
-            {Array(firstDayOfMonth).fill(null).map((_,i)=><div key={`e${i}`}/>)}
-            {Array(daysInMonth).fill(null).map((_,i)=>{
-              const d=i+1;const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-              const isPast=ds<minDateStr;const avail=!isPast?getAvailSlotsModify(ds,rdv):[];const hasDispo=avail.length>0;const isSel=ds===newDate;
-              return(<div key={d} onClick={()=>{if(hasDispo&&!isPast){setNewDate(ds);setNewSlot("");}}} style={{textAlign:"center",padding:"7px 2px",borderRadius:6,cursor:hasDispo&&!isPast?"pointer":"default",background:isSel?C.accent:"transparent",color:isSel?"#fff":isPast||!hasDispo?"#3a3040":C.text,fontWeight:isSel?700:400,fontSize:12,position:"relative"}}>
-                {d}{hasDispo&&!isSel&&<div style={{width:3,height:3,borderRadius:"50%",background:C.accent,position:"absolute",bottom:1,left:"50%",transform:"translateX(-50%)"}}/>}
-              </div>);
-            })}
-          </div>
-        </div>
-        {/* Créneaux */}
-        {newDate&&availSlots.length>0&&(
-          <div style={{marginBottom:12}}>
-            <div style={{fontSize:11,color:C.textMid,marginBottom:8}}>{DAYS_L_M[parseD(newDate).getDay()]} {parseD(newDate).getDate()} {MONTHS_M[parseD(newDate).getMonth()]}</div>
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
-              {availSlots.map(s=>{const active=newSlot===s;return(<div key={s} onClick={()=>setNewSlot(s)} style={{padding:"10px 4px",textAlign:"center",borderRadius:8,border:`1.5px solid ${active?C.accent:C.border}`,background:active?C.accent:C.surface,color:active?"#fff":C.textMid,fontSize:12,fontWeight:active?700:400,cursor:"pointer"}}>{s}</div>);})}
-            </div>
-          </div>
-        )}
-        {newDate&&availSlots.length===0&&<div style={{fontSize:12,color:C.textLight,marginBottom:12,textAlign:"center"}}>Aucun créneau disponible ce jour.</div>}
-        {modifyError&&<div style={{fontSize:12,color:"#f08080",marginBottom:10,padding:"8px 12px",background:"#2a1010",border:"1px solid #5a2020",borderRadius:8}}>{modifyError}</div>}
-        <div style={{display:"flex",gap:8}}>
-          <button onClick={()=>{setModifyingRdv(null);setNewDate("");setNewSlot("");setModifyError("");}} style={{flex:1,padding:"9px",borderRadius:8,border:`1px solid ${C.border}`,background:"none",color:C.textMid,fontSize:12,cursor:"pointer"}}>Annuler</button>
-          <button onClick={handleModify} disabled={!newDate||!newSlot||modifying} style={{flex:2,padding:"9px",borderRadius:8,border:"none",background:(!newDate||!newSlot||modifying)?C.border:`linear-gradient(135deg,#c9a0c0,#7a4878)`,color:(!newDate||!newSlot||modifying)?C.textLight:"#fff",fontSize:12,fontWeight:600,cursor:(!newDate||!newSlot||modifying)?"default":"pointer"}}>{modifying?"Déplacement…":"Confirmer le déplacement"}</button>
-        </div>
-      </div>
-    );
-  };
-
   const Card=({r})=>{
     const isUpcoming=r.statut!=="annulé"&&r.date>=todayStr();
     const isModifying=modifyingRdv?.id===r.id;
@@ -931,7 +927,7 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
               {isModifying?"✕ Fermer":"📅 Modifier / Déplacer"}
             </button>
           )}
-          {isModifying&&<ModifyPicker rdv={r}/>}
+          {isModifying&&<ModifyPicker rdv={r} newDate={newDate} setNewDate={setNewDate} newSlot={newSlot} setNewSlot={setNewSlot} modifyDone={modifyDone} modifyError={modifyError} modifying={modifying} handleModify={handleModify} onClose={()=>{setModifyingRdv(null);setNewDate("");setNewSlot("");setModifyError("");}} getAvailSlotsModify={getAvailSlotsModify}/>}
         </div>
       </div>
     );
