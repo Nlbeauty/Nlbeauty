@@ -82,11 +82,13 @@ const sendCancelEmail = async (rdv) => {
 const NTFY_TOPIC = "neylika-rdv-q8mk3xfp7vwn";
 const sendPush = async (title, message) => { try { await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, { method: "POST", body: `${title}\n${message}`, mode: "no-cors", keepalive: true }); } catch(e) { console.log("Push error:", e); } };
 
+const HORS_FIDELITE = ["Dépose extérieure","Dépose Neylika","Dépose semi-permanent","Consultation"];
 const checkFidelitePromo = (allRdvs, newRdv) => {
   if(newRdv.cat_id !== "ongles" && newRdv.cat_id !== "spray") return null;
   if(newRdv.statut !== "confirmé") return null;
+  if(HORS_FIDELITE.includes(newRdv.prestation)) return null;
   const sameClient = (r) => { if(newRdv.user_id) return r.user_id === newRdv.user_id; return r.client_tel === newRdv.client_tel; };
-  const existing = allRdvs.filter(r => r.cat_id === newRdv.cat_id && r.statut === "confirmé" && sameClient(r)).length;
+  const existing = allRdvs.filter(r => r.cat_id === newRdv.cat_id && r.statut === "confirmé" && sameClient(r) && !HORS_FIDELITE.includes(r.prestation)).length;
   const nb = existing + 1;
   const cycle = nb % 10;
   if(cycle === 0) return {remise:10, msg:`🎁 PROMO -10€ à appliquer (${nb}e RDV ${newRdv.cat_id})`, nb};
@@ -927,7 +929,26 @@ function AdminView({onExit}) {
   const caParMois=(()=>{const tab=Array(12).fill(0).map((_,i)=>({mois:i,ca:0,nb:0}));confirmes.forEach(r=>{const d=parseD(r.date);if(d.getFullYear()===currentYear){tab[d.getMonth()].ca+=(r.prix||0);tab[d.getMonth()].nb+=1;}else if(currentMonth===11&&d.getFullYear()===currentYear+1&&d.getMonth()===0){tab[0].ca+=(r.prix||0);tab[0].nb+=1;}});return tab;})();
   const caMaxMensuel=Math.max(...caParMois.map(m=>m.ca),1);
   const getPromoFor=(r)=>{if(r.cat_id!=="ongles"&&r.cat_id!=="spray")return null;if(r.statut!=="confirmé")return null;const sameClient=(x)=>r.user_id?x.user_id===r.user_id:x.client_tel===r.client_tel;const allSame=rdvs.filter(x=>x.cat_id===r.cat_id&&x.statut==="confirmé"&&sameClient(x)).sort((a,b)=>(a.date+a.slot).localeCompare(b.date+b.slot));const idx=allSame.findIndex(x=>x.id===r.id);if(idx===-1)return null;const nb=idx+1;const cycle=nb%10;if(cycle===0)return{remise:10,nb};if(cycle===5)return{remise:5,nb};return null;};
-  const Row=({r})=>(
+  const [editingId,setEditingId]=useState(null);
+  const [editPrix,setEditPrix]=useState("");
+  const [editPresta,setEditPresta]=useState("");
+  const [editSaving,setEditSaving]=useState(false);
+  const saveEdit=async(r)=>{
+    setEditSaving(true);
+    const body={};
+    if(editPresta.trim()&&editPresta.trim()!==r.prestation) body.prestation=editPresta.trim();
+    const p=parseFloat(editPrix);
+    if(!isNaN(p)&&p!==r.prix) body.prix=p;
+    if(Object.keys(body).length>0){
+      await api.patch("rdvs",`id=eq.${r.id}`,body);
+      setRdvs(prev=>prev.map(x=>x.id===r.id?{...x,...body}:x));
+    }
+    setEditingId(null);setEditSaving(false);
+  };
+  const Row=({r})=>{
+    const isEditing=editingId===r.id;
+    const smsUrl=`sms:${r.client_tel}`;
+    return (
     <div style={{padding:"16px 0",borderBottom:`1px solid ${C.borderLight}`,display:"flex",gap:14,alignItems:"flex-start",opacity:r.statut==="annulé"?.35:1}}>
       <div style={{minWidth:44}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>{r.slot}</div><div style={{fontSize:11,color:C.textLight,marginTop:2}}>{r.duree}min</div></div>
       <div style={{width:3,alignSelf:"stretch",borderRadius:2,background:svcColor(r.cat_id),flexShrink:0}}/>
@@ -937,13 +958,35 @@ function AdminView({onExit}) {
             <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{r.prestation}{(()=>{const promo=getPromoFor(r);if(!promo)return null;return(<span style={{fontSize:10,fontWeight:700,background:"#3a2848",color:"#f0c060",padding:"2px 8px",borderRadius:10,letterSpacing:.3}}>🎁 -{promo.remise}€ ({promo.nb}e)</span>);})()}</div>
             <div style={{fontSize:12,color:C.textMid}}>{r.client_prenom} {r.client_nom} · {r.client_tel}</div>
           </div>
-          <div style={{textAlign:"right"}}><div style={{fontSize:14,fontWeight:700,color:C.textMid}}>{r.prix} €</div></div>
+          <div style={{textAlign:"right",display:"flex",alignItems:"center",gap:8}}>
+            <div style={{fontSize:14,fontWeight:700,color:C.textMid}}>{r.prix} €</div>
+            {r.statut!=="annulé"&&<button onClick={()=>{setEditingId(isEditing?null:r.id);setEditPrix(String(r.prix));setEditPresta(r.prestation);}} style={{fontSize:11,color:C.textLight,background:"none",border:`1px solid ${C.border}`,borderRadius:7,padding:"3px 8px",cursor:"pointer"}}>{isEditing?"✕":"✏️"}</button>}
+          </div>
         </div>
-        {r.statut!=="annulé"&&(<div style={{display:"flex",gap:8,marginTop:10}}><a href={`tel:${r.client_tel}`} style={{fontSize:12,color:C.textMid,textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 12px"}}>Appeler</a><button onClick={()=>cancel(r.id)} style={{fontSize:12,color:"#c05050",background:"none",border:"1px solid #f0d0d0",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Annuler</button></div>)}
+        {/* Mode édition */}
+        {isEditing&&(
+          <div style={{marginTop:10,padding:"12px 14px",background:C.surfaceAlt,borderRadius:10,border:`1px solid ${C.border}`}}>
+            <div style={{fontSize:11,color:C.textLight,marginBottom:8,letterSpacing:1,textTransform:"uppercase"}}>Modifier le RDV</div>
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:11,color:C.textLight,marginBottom:4}}>Prestation</div>
+              <input value={editPresta} onChange={e=>setEditPresta(e.target.value)} style={{width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,color:C.text,fontSize:13}}/>
+            </div>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:11,color:C.textLight,marginBottom:4}}>Prix (€)</div>
+              <input value={editPrix} onChange={e=>setEditPrix(e.target.value)} type="number" style={{width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,color:C.text,fontSize:13}}/>
+            </div>
+            <button onClick={()=>saveEdit(r)} disabled={editSaving} style={{width:"100%",padding:"8px",borderRadius:8,border:"none",background:`linear-gradient(135deg,#c9a0c0,#7a4878)`,color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>{editSaving?"Sauvegarde…":"Enregistrer"}</button>
+          </div>
+        )}
+        {r.statut!=="annulé"&&(<div style={{display:"flex",gap:8,marginTop:10}}>
+          <a href={`tel:${r.client_tel}`} style={{fontSize:12,color:C.textMid,textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 12px"}}>📞 Appeler</a>
+          <a href={smsUrl} style={{fontSize:12,color:C.textMid,textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 12px"}}>💬 Message</a>
+          <button onClick={()=>cancel(r.id)} style={{fontSize:12,color:"#c05050",background:"none",border:"1px solid #f0d0d0",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Annuler</button>
+        </div>)}
         {r.statut==="annulé"&&<div style={{fontSize:11,color:"#c05050",marginTop:6}}>Annulé</div>}
       </div>
     </div>
-  );
+  );};
   return (
     <div style={{maxWidth:560,margin:"0 auto",padding:"0 20px 100px"}}>
       <div style={{paddingTop:48,paddingBottom:32}}>
