@@ -1333,16 +1333,13 @@ export default function App() {
                     <GBtn onClick={handleLogout}>Se déconnecter</GBtn>
                   </>
                 )}
+                <div style={{textAlign:"center",padding:"8px",marginTop:32}}>
+                  <span onClick={()=>setShowMentions(true)} style={{fontSize:9,color:"rgba(200,169,154,0.25)",cursor:"pointer",letterSpacing:"0.05em"}}>Mentions légales &amp; CGV</span>
+                </div>
               </>
             )}
           </div>
         )}
-      </div>
-      {/* Lien mentions légales */}
-      <div style={{textAlign:"center",padding:"12px",marginTop:40,borderTop:"1px solid rgba(200,169,154,0.15)"}}>
-        <span onClick={()=>setShowMentions(true)} style={{fontSize:10,color:"rgba(200,169,154,0.4)",cursor:"pointer",letterSpacing:"0.05em"}}>
-          Mentions légales &amp; CGV
-        </span>
       </div>
       {/* Modale mentions légales */}
       {showMentions&&(
