@@ -3,86 +3,52 @@ import { useState, useEffect, useRef } from "react";
 const SUPA_URL = "https://xpackkiprznsrotsohce.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwYWNra2lwcnpuc3JvdHNvaGNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NTkzMTIsImV4cCI6MjA5MTIzNTMxMn0.BBZzEnIkHfGcrMPoRa8cMp3_KKrlFAnsg8lXQijC9dA";
 const SUPA_PUB = "sb_publishable_kwmh9aAwybdtGLZWA7Mqfg_PrsEEuGu";
-// ─── AUTH ADMIN SUPABASE ───────────────────────────────
 const AUTH_STORAGE_KEY = "neylika_admin_session";
 
 const adminLogin = async (email, password) => {
   const res = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
     method: "POST",
-    headers: {
-      "apikey": SUPA_KEY,
-      "Content-Type": "application/json",
-    },
+    headers: { "apikey": SUPA_KEY, "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
   const data = await res.json();
-  if (!res.ok) {
-    return { ok: false, error: data.error_description || data.msg || "Identifiants incorrects" };
-  }
+  if (!res.ok) return { ok: false, error: data.error_description || data.msg || "Identifiants incorrects" };
   localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data));
   return { ok: true, session: data };
 };
 
-const adminLogout = () => {
-  localStorage.removeItem(AUTH_STORAGE_KEY);
-};
+const adminLogout = () => { localStorage.removeItem(AUTH_STORAGE_KEY); };
 
 const getAdminSession = () => {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
     if (!raw) return null;
     const session = JSON.parse(raw);
-    // Vérifie que le token n'est pas expiré
-    if (session.expires_at && session.expires_at * 1000 < Date.now()) {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-      return null;
-    }
+    if (session.expires_at && session.expires_at * 1000 < Date.now()) { localStorage.removeItem(AUTH_STORAGE_KEY); return null; }
     return session;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 };
 
-// —— RESET MOT DE PASSE CLIENT ——————————————————————
 const resetClientPassword = async (email) => {
   const res = await fetch(`${SUPA_URL}/auth/v1/recover`, {
     method: "POST",
-    headers: {
-      "apikey": SUPA_PUB,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      email,
-      options: {
-        redirectTo: "https://neylika.vercel.app/?reset=1"
-      }
-    }),
+    headers: { "apikey": SUPA_PUB, "Content-Type": "application/json" },
+    body: JSON.stringify({ email, options: { redirectTo: "https://neylika.vercel.app/?reset=1" } }),
   });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    return { ok: false, error: data.error_description || data.msg || "Impossible d'envoyer l'email" };
-  }
-  return { ok: true };
-};
-// —— UPDATE MOT DE PASSE (apres reset) ——————————————
-const updateClientPassword = async (accessToken, newPassword) => {
-  const res = await fetch(`${SUPA_URL}/auth/v1/user`, {
-    method: "PUT",
-    headers: {
-      "apikey": SUPA_PUB,
-      "Authorization": `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ password: newPassword }),
-  });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    return { ok: false, error: data.error_description || data.msg || "Impossible de modifier le mot de passe" };
-  }
+  if (!res.ok) { const data = await res.json().catch(() => ({})); return { ok: false, error: data.error_description || data.msg || "Impossible d'envoyer l'email" }; }
   return { ok: true };
 };
 
-// ─── EMAILJS ──────────────────────────────────────────────────────────────────
+const updateClientPassword = async (accessToken, newPassword) => {
+  const res = await fetch(`${SUPA_URL}/auth/v1/user`, {
+    method: "PUT",
+    headers: { "apikey": SUPA_PUB, "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ password: newPassword }),
+  });
+  if (!res.ok) { const data = await res.json().catch(() => ({})); return { ok: false, error: data.error_description || data.msg || "Impossible de modifier le mot de passe" }; }
+  return { ok: true };
+};
+
 const EJS_SERVICE = "service_kavvgs8";
 const EJS_TPL_CLIENTE = "template_db2x2jl";
 const EJS_TPL_PRO = "template_7hrk5ea";
@@ -96,131 +62,55 @@ const sendEmails = async (rdv, clientEmail) => {
     const date = new Date(+y, +m-1, +d);
     return `${jours[date.getDay()]} ${+d} ${mois[+m-1]} ${y}`;
   };
-  const params = {
-    client_prenom: rdv.client_prenom,
-    client_nom: rdv.client_nom,
-    client_tel: rdv.client_tel,
-    client_email: clientEmail,
-    prestation: rdv.prestation,
-    date: formatDate(rdv.date),
-    slot: rdv.slot,
-    prix: rdv.prix,
-  };
+  const params = { client_prenom: rdv.client_prenom, client_nom: rdv.client_nom, client_tel: rdv.client_tel, client_email: clientEmail, prestation: rdv.prestation, date: formatDate(rdv.date), slot: rdv.slot, prix: rdv.prix };
   try {
-    const send = (tpl, to) => fetch("https://api.emailjs.com/api/v1.0/email/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ service_id: EJS_SERVICE, template_id: tpl, user_id: EJS_KEY, template_params: { ...params, to_email: to } }),
-    });
+    const send = (tpl, to) => fetch("https://api.emailjs.com/api/v1.0/email/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ service_id: EJS_SERVICE, template_id: tpl, user_id: EJS_KEY, template_params: { ...params, to_email: to } }) });
     await send(EJS_TPL_CLIENTE, clientEmail);
   } catch(e) { console.log("Email error:", e); }
 };
 
 const sendCancelEmail = async (rdv) => {
-  // Si la cliente n'a pas d'email (RDV créé admin sans email), on n'envoie rien
   if(!rdv.client_email) return;
   const JOURS = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
   const MOIS = ["janvier","février","mars","avril","mai","juin","juillet","août","septembre","octobre","novembre","décembre"];
   const dateObj = new Date(rdv.date + "T12:00:00");
   const dateFr = `${JOURS[dateObj.getDay()]} ${dateObj.getDate()} ${MOIS[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
-  const params = {
-    client_prenom: rdv.client_prenom||"",
-    client_nom: rdv.client_nom||"",
-    client_tel: rdv.client_tel||"",
-    client_email: rdv.client_email||"",
-    prestation: rdv.prestation,
-    date: dateFr,
-    slot: rdv.slot||"",
-    prix: rdv.prix||0,
-    to_email: rdv.client_email,
-  };
-  try {
-    await fetch("https://api.emailjs.com/api/v1.0/email/send", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ service_id: EJS_SERVICE, template_id: EJS_TPL_PRO, user_id: EJS_KEY,
-        template_params: params
-      }),
-    });
-  } catch(e) { console.log("Cancel email error:", e); }
+  const params = { client_prenom: rdv.client_prenom||"", client_nom: rdv.client_nom||"", client_tel: rdv.client_tel||"", client_email: rdv.client_email||"", prestation: rdv.prestation, date: dateFr, slot: rdv.slot||"", prix: rdv.prix||0, to_email: rdv.client_email };
+  try { await fetch("https://api.emailjs.com/api/v1.0/email/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ service_id: EJS_SERVICE, template_id: EJS_TPL_PRO, user_id: EJS_KEY, template_params: params }) }); } catch(e) { console.log("Cancel email error:", e); }
 };
 
 const NTFY_TOPIC = "neylika-rdv-q8mk3xfp7vwn";
+const sendPush = async (title, message) => { try { await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, { method: "POST", body: `${title}\n${message}`, mode: "no-cors", keepalive: true }); } catch(e) { console.log("Push error:", e); } };
 
-const sendPush = async (title, message) => {
-  try {
-    // FIX: keepalive permet à la requête de continuer même si la page navigue/recharge
-    await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, {
-      method: "POST",
-      body: `${title}\n${message}`,
-      mode: "no-cors",
-      keepalive: true,
-    });
-  } catch(e) { console.log("Push error:", e); }
-};
- // ─── FIDÉLITÉ : détecter si un RDV déclenche un palier promo ──────────────
-// Compte les RDV ongles ou spray confirmés (passés + à venir, y compris le nouveau)
-// et retourne {remise, msg, nb} si on atteint un palier, sinon null
 const checkFidelitePromo = (allRdvs, newRdv) => {
   if(newRdv.cat_id !== "ongles" && newRdv.cat_id !== "spray") return null;
   if(newRdv.statut !== "confirmé") return null;
-  // Compter tous les RDV de cette cat (confirmés), y compris le nouveau
-  const sameClient = (r) => {
-    if(newRdv.user_id) return r.user_id === newRdv.user_id;
-    return r.client_tel === newRdv.client_tel; // fallback pour les RDV créés admin sans user_id
-  };
-  const existing = allRdvs.filter(r =>
-    r.cat_id === newRdv.cat_id &&
-    r.statut === "confirmé" &&
-    sameClient(r)
-  ).length;
-  const nb = existing + 1; // +1 pour le nouveau RDV qu'on est en train de créer
+  const sameClient = (r) => { if(newRdv.user_id) return r.user_id === newRdv.user_id; return r.client_tel === newRdv.client_tel; };
+  const existing = allRdvs.filter(r => r.cat_id === newRdv.cat_id && r.statut === "confirmé" && sameClient(r)).length;
+  const nb = existing + 1;
   const cycle = nb % 10;
   if(cycle === 0) return {remise:10, msg:`🎁 PROMO -10€ à appliquer (${nb}e RDV ${newRdv.cat_id})`, nb};
   if(cycle === 5) return {remise:5, msg:`🎁 PROMO -5€ à appliquer (${nb}e RDV ${newRdv.cat_id})`, nb};
   return null;
 };
 
-// ─── CLIENT SESSION HELPERS ────────────────────────────
 const CLIENT_STORAGE_KEY = "nlb_sess";
-
 const getClientSession = () => {
-  try {
-    const raw = localStorage.getItem(CLIENT_STORAGE_KEY);
-    if (!raw) return null;
-    const s = JSON.parse(raw);
-    // Vérifie expiration : Supabase stocke expires_at en secondes Unix
-    if (s.expires_at && s.expires_at * 1000 < Date.now()) {
-      // Expired but keep refresh_token for refresh attempt
-      return s;
-    }
-    return s;
-  } catch {
-    return null;
-  }
+  try { const raw = localStorage.getItem(CLIENT_STORAGE_KEY); if (!raw) return null; return JSON.parse(raw); } catch { return null; }
 };
 
 const api = {
   h: { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
   ah: (t) => ({ "apikey": SUPA_KEY, "Authorization": `Bearer ${t}`, "Content-Type": "application/json", "Prefer": "return=representation" }),
-  // Headers auto : priorité au token cliente connectée, sinon token admin, sinon clé anonyme
   authHeaders() {
-    // FIX: prendre d'abord la session cliente, sinon admin, sinon anon
     const clientSess = getClientSession();
-    if (clientSess && clientSess.token) {
-      return this.ah(clientSess.token);
-    }
+    if (clientSess && clientSess.token) return this.ah(clientSess.token);
     const s = getAdminSession();
     return s ? this.ah(s.access_token) : this.h;
   },
   async get(table, q="") { const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${q}`,{headers:this.authHeaders()}); return r.json(); },
   async post(table, body, token) { const h=token?this.ah(token):{...this.authHeaders(),"Prefer":"return=representation"}; const r=await fetch(`${SUPA_URL}/rest/v1/${table}`,{method:"POST",headers:h,body:JSON.stringify(body)}); return r.json(); },
-  // FIX: patch accepte maintenant un token optionnel pour les opérations cliente
-  async patch(table, filter, body, token) {
-    const h = token ? {...this.ah(token), "Prefer":"return=representation"} : {...this.authHeaders(),"Prefer":"return=representation"};
-    const r = await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`,{method:"PATCH",headers:h,body:JSON.stringify(body)});
-    return r.json();
-  },
+  async patch(table, filter, body, token) { const h=token?{...this.ah(token),"Prefer":"return=representation"}:{...this.authHeaders(),"Prefer":"return=representation"}; const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`,{method:"PATCH",headers:h,body:JSON.stringify(body)}); return r.json(); },
   async signUp(email, password) { const r=await fetch(`${SUPA_URL}/auth/v1/signup`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({email,password})}); return r.json(); },
   async signIn(email, password) { const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({email,password})}); return r.json(); },
   async refreshToken(refresh_token) { const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=refresh_token`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({refresh_token})}); return r.json(); },
@@ -228,10 +118,10 @@ const api = {
   async upsert(table, body, token) { const r=await fetch(`${SUPA_URL}/rest/v1/${table}`,{method:"POST",headers:{...this.ah(token),"Prefer":"return=representation,resolution=merge-duplicates"},body:JSON.stringify(body)}); return r.json(); },
 };
 
-// ─── SERVICES avec sous-catégories ───────────────────────────────────────────
+// ─── SERVICES ────────────────────────────────────────────────────────────────
 const SERVICES = [
   {
-    id: "ongles", label: "Prothésie Ongulaire", color: "#c4a882",
+    id: "ongles", label: "Prothésie Ongulaire — Mains", color: "#c4a882",
     desc: "Gainage, capsules & nail art",
     subcats: [
       {
@@ -262,6 +152,14 @@ const SERVICES = [
           { id:"r2", nom:"Couleur", duree:120, prix:50, acompte:15 },
           { id:"r3", nom:"French", duree:120, prix:50, acompte:15 },
           { id:"r4", nom:"Chrome", duree:120, prix:50, acompte:15 },
+          { id:"r5", nom:"Nail art", duree:120, prix:null, acompte:0, devis:true },
+        ],
+      },
+      {
+        id: "semi_permanent", label: "Semi-permanent",
+        note: "💅 Le nail art n'est pas disponible en semi-permanent.",
+        prestations: [
+          { id:"sp1", nom:"Couleur", duree:60, prix:35, acompte:0 },
         ],
       },
       {
@@ -288,9 +186,9 @@ const SERVICES = [
       {
         id: "laser_forfaits", label: "Forfaits 8 séances combinés",
         prestations: [
-          { id:"lf1", nom:"Aisselles + Maillot intégral", duree:55, prix:1240, acompte:0 },
-          { id:"lf2", nom:"Aisselles + Maillot intégral + Demi-jambes", duree:95, prix:2360, acompte:0 },
-          { id:"lf3", nom:"Aisselles + Maillot intégral + Jambes entières", duree:115, prix:3320, acompte:0 },
+          { id:"lf1", nom:"Aisselles + Maillot intégral", duree:55, prix:620, prixNormal:1240, acompte:0 },
+          { id:"lf2", nom:"Aisselles + Maillot intégral + Demi-jambes", duree:95, prix:1180, prixNormal:2360, acompte:0 },
+          { id:"lf3", nom:"Aisselles + Maillot intégral + Jambes entières", duree:115, prix:1660, prixNormal:3320, acompte:0 },
         ],
       },
       {
@@ -339,7 +237,6 @@ const SERVICES = [
   },
 ];
 
-const SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
 const MONTHS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 const DAYS_S = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
 const DAYS_L = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
@@ -357,12 +254,12 @@ const C = {
   accent:"#c9a0c0", accentDark:"#c090b8", accentLight:"#2e1e30",
   locked:"#2a2040", lockedText:"#b8a8d8",
   warn:"#2a2010", warnText:"#d8b850", warnBorder:"#4a3820",
+  tanGold:"#c49060", tanLight:"#2a1e10", tanBorder:"#4a3218",
 };
 
 const GS = () => (
   <>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=Raleway:wght@300;400;500;600&display=swap" rel="stylesheet"/>
-
     <style>{`
       *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
       body{background:${C.bg};font-family:'Raleway',sans-serif;color:${C.text};}
@@ -386,16 +283,146 @@ const PBtn = ({children,onClick,disabled,style={}}) => <button onClick={onClick}
 const GBtn = ({children,onClick,style={}}) => <button onClick={onClick} style={{width:"100%",padding:"13px",borderRadius:12,border:`1.5px solid ${C.border}`,background:"transparent",color:C.textMid,fontSize:14,cursor:"pointer",...style}}>{children}</button>;
 const Toast = ({msg,type="ok"}) => <div className="fi" style={{position:"fixed",top:20,left:"50%",transform:"translateX(-50%)",background:type==="err"?"#fff0f0":"#f0faf4",border:`1px solid ${type==="err"?"#f0c8c8":"#a8d8b8"}`,color:type==="err"?"#c05050":"#3a8050",padding:"12px 24px",borderRadius:12,fontSize:13,fontWeight:500,zIndex:9999,whiteSpace:"nowrap",boxShadow:"0 4px 20px rgba(0,0,0,.08)"}}>{msg}</div>;
 
+// ── MODAL CONSIGNES SPRAY TAN ─────────────────────────────────────────────────
+function SprayTanModal({ onConfirm }) {
+  const [scrolled, setScrolled] = useState(false);
+  const handleScroll = (e) => { const el=e.target; if(el.scrollTop+el.clientHeight>=el.scrollHeight*0.8) setScrolled(true); };
+  const Sec = ({title,emoji,color,children}) => (
+    <div style={{marginBottom:20}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingBottom:8,borderBottom:`1px solid ${C.tanBorder}`}}>
+        <span style={{fontSize:17}}>{emoji}</span>
+        <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:16,fontWeight:600,color,letterSpacing:.5}}>{title}</span>
+      </div>
+      {children}
+    </div>
+  );
+  const It = ({text,ok=true}) => (
+    <div style={{display:"flex",alignItems:"flex-start",gap:9,marginBottom:7}}>
+      <span style={{fontSize:13,flexShrink:0,marginTop:1,color:ok?"#a0c090":"#e05050"}}>{ok?"✓":"✗"}</span>
+      <span style={{fontSize:13,color:C.textMid,lineHeight:1.55}}>{text}</span>
+    </div>
+  );
+  return (
+    <div className="fi" style={{position:"fixed",inset:0,zIndex:600,background:"rgba(20,14,28,.88)",backdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",padding:"16px"}}>
+      <div className="fu" style={{width:"100%",maxWidth:480,background:C.surface,border:`1.5px solid ${C.tanGold}`,borderRadius:20,display:"flex",flexDirection:"column",maxHeight:"88vh",boxShadow:"0 8px 40px rgba(196,144,96,.18)"}}>
+        <div style={{padding:"20px 22px 14px",borderBottom:`1px solid ${C.tanBorder}`,flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+            <span style={{fontSize:20}}>🌟</span>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:21,color:C.text,letterSpacing:.5}}>Conseils Spray Tan</div>
+          </div>
+          <div style={{fontSize:12,color:C.textLight,lineHeight:1.5}}>Merci de lire attentivement avant de réserver — lecture obligatoire.</div>
+        </div>
+        <div onScroll={handleScroll} style={{flex:1,overflowY:"auto",padding:"18px 22px"}}>
+          <Sec title="24h avant la séance" emoji="📅" color={C.tanGold}>
+            <It text="Faire un gommage sur tout le corps — marc de café ou gant exfoliant. Élimine les peaux mortes et traces de crème."/>
+            <It text="Faire son épilation 24h avant la séance."/>
+          </Sec>
+          <Sec title="Le jour J" emoji="🚿" color={C.tanGold}>
+            <It text="Douche obligatoire 2h max avant le RDV — eau uniquement ou gel douche pH neutre."/>
+            <It text="Tenue : sous-vêtements ou maillot sombre. Après la séance : vêtements amples et foncés — évitez jeans et leggings."/>
+            <It text="Peau propre : pas de maquillage, crème, déodorant, parfum ni bijoux." ok={false}/>
+          </Sec>
+          <Sec title="Pendant le temps de pose" emoji="⏱️" color="#e09050">
+            <div style={{background:C.tanLight,border:`1px solid ${C.tanBorder}`,borderRadius:9,padding:"9px 12px",marginBottom:10,fontSize:12,color:C.tanGold,fontWeight:600}}>⚠️ Ne pas se mouiller pendant le temps de pose !</div>
+            <It text="Pas d'eau — ne pas se laver les mains." ok={false}/>
+            <It text="Pas de gel hydroalcoolique." ok={false}/>
+            <It text="Ne pas boire à la bouteille — utiliser une paille." ok={false}/>
+            <It text="Pas de sport." ok={false}/>
+            <It text="Se protéger de la pluie — prévoir un parapluie si besoin." ok={false}/>
+          </Sec>
+          <Sec title="Après le temps de pose" emoji="✨" color="#a0c090">
+            <It text="Première douche sans savon — rinçage à l'eau uniquement."/>
+            <It text="Le lendemain : douche habituelle normale."/>
+            <It text="Hydrater votre peau matin & soir — plus vous hydratez, plus votre bronzage tient."/>
+            <It text="Pour retirer le tan : faire un gommage."/>
+            <It text="Pas de crème grasse, pas de monoï, pas de gommage." ok={false}/>
+            <It text="Épilation : attendre minimum 3 jours après la séance." ok={false}/>
+          </Sec>
+          <Sec title="Contre-indications" emoji="🚫" color="#e05050">
+            <It text="Peaux avec lésions ouvertes ou infections cutanées" ok={false}/>
+            <It text="Allergie aux ingrédients autobronzants (DHA)" ok={false}/>
+            <It text="Asthme ou troubles respiratoires — à signaler impérativement pour éviter l'inhalation" ok={false}/>
+            <It text="L'épilation laser n'est pas conseillée avec le spray tan" ok={false}/>
+          </Sec>
+          <div style={{height:6}}/>
+        </div>
+        <div style={{padding:"14px 22px 18px",borderTop:`1px solid ${C.tanBorder}`,flexShrink:0}}>
+          {!scrolled&&<div style={{textAlign:"center",fontSize:12,color:C.textLight,marginBottom:9}}>↓ Faites défiler jusqu'en bas pour continuer</div>}
+          <button onClick={scrolled?onConfirm:undefined} style={{width:"100%",padding:"14px",borderRadius:12,border:"none",background:scrolled?`linear-gradient(135deg,#c9a0c0,#7a4878)`:C.border,color:scrolled?"#fff":C.textLight,fontSize:14,fontWeight:600,letterSpacing:.4,cursor:scrolled?"pointer":"default",transition:"all .3s",boxShadow:scrolled?"0 4px 18px rgba(196,168,130,.28)":"none"}}>
+            {scrolled?"✓ J'ai lu et je continue":"Lisez les conseils ci-dessus"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PAGE CONSEILS SPRAY TAN (compte client) ───────────────────────────────────
+function SprayTanConseilsPage({ onClose }) {
+  const Sec = ({title,emoji,color,children}) => (
+    <div style={{marginBottom:22}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:11,paddingBottom:8,borderBottom:`1px solid ${C.tanBorder}`}}>
+        <span style={{fontSize:18}}>{emoji}</span>
+        <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:17,fontWeight:600,color,letterSpacing:.5}}>{title}</span>
+      </div>
+      {children}
+    </div>
+  );
+  const It = ({text,ok=true}) => (
+    <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:8}}>
+      <span style={{fontSize:13,flexShrink:0,marginTop:2,color:ok?"#a0c090":"#e05050"}}>{ok?"✓":"✗"}</span>
+      <span style={{fontSize:13,color:C.textMid,lineHeight:1.6}}>{text}</span>
+    </div>
+  );
+  return (
+    <div className="fu">
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:22}}>
+        <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:24,color:C.text}}>Conseils Spray Tan 🌟</div>
+        <button onClick={onClose} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.textMid,padding:"6px 12px",fontSize:12,cursor:"pointer"}}>← Retour</button>
+      </div>
+      <div style={{background:C.tanLight,border:`1.5px solid ${C.tanGold}`,borderRadius:13,padding:"13px 17px",marginBottom:22}}>
+        <div style={{fontSize:13,color:C.tanGold,fontWeight:600,marginBottom:3}}>🌟 Pour un bronzage parfait et durable</div>
+        <div style={{fontSize:12,color:C.textMid,lineHeight:1.6}}>Retrouvez ici tous vos conseils avant et après séance, à consulter à tout moment.</div>
+      </div>
+      <Sec title="24h avant la séance" emoji="📅" color={C.tanGold}>
+        <It text="Faire un gommage sur tout le corps — marc de café ou gant exfoliant. Élimine les peaux mortes et traces de crème."/>
+        <It text="Faire son épilation 24h avant la séance."/>
+      </Sec>
+      <Sec title="Le jour J" emoji="🚿" color={C.tanGold}>
+        <It text="Douche obligatoire 2h max avant le RDV — eau uniquement ou gel douche pH neutre."/>
+        <It text="Tenue : sous-vêtements ou maillot sombre. Après la séance : vêtements amples et foncés — évitez jeans et leggings."/>
+        <It text="Peau propre : pas de maquillage, crème, déodorant, parfum ni bijoux." ok={false}/>
+      </Sec>
+      <Sec title="Pendant le temps de pose" emoji="⏱️" color="#e09050">
+        <div style={{background:C.tanLight,border:`1px solid ${C.tanBorder}`,borderRadius:9,padding:"9px 12px",marginBottom:10,fontSize:12,color:C.tanGold,fontWeight:600}}>⚠️ Ne pas se mouiller pendant le temps de pose !</div>
+        <It text="Pas d'eau — ne pas se laver les mains." ok={false}/>
+        <It text="Pas de gel hydroalcoolique." ok={false}/>
+        <It text="Ne pas boire à la bouteille — utiliser une paille." ok={false}/>
+        <It text="Pas de sport." ok={false}/>
+        <It text="Se protéger de la pluie — prévoir un parapluie si besoin." ok={false}/>
+      </Sec>
+      <Sec title="Après le temps de pose" emoji="✨" color="#a0c090">
+        <It text="Première douche sans savon — rinçage à l'eau uniquement."/>
+        <It text="Le lendemain : douche habituelle normale."/>
+        <It text="Hydrater votre peau matin & soir — plus vous hydratez, plus votre bronzage tient."/>
+        <It text="Pour retirer le tan : faire un gommage."/>
+        <It text="Pas de crème grasse, pas de monoï, pas de gommage." ok={false}/>
+        <It text="Épilation : attendre minimum 3 jours après la séance." ok={false}/>
+      </Sec>
+      <Sec title="Contre-indications" emoji="🚫" color="#e05050">
+        <It text="Peaux avec lésions ouvertes ou infections cutanées" ok={false}/>
+        <It text="Allergie aux ingrédients autobronzants (DHA)" ok={false}/>
+        <It text="Asthme ou troubles respiratoires — à signaler impérativement" ok={false}/>
+        <It text="L'épilation laser n'est pas conseillée avec le spray tan" ok={false}/>
+      </Sec>
+    </div>
+  );
+}
+
 function Calendar({selected,onSelect,bookedDates=[],unavailableDates=[],firstAvailable=null}) {
   const t=new Date();
-  const [yr,setYr]=useState(()=>{
-    if(firstAvailable){const [y]=firstAvailable.split("-");return +y;}
-    return t.getFullYear();
-  });
-  const [mo,setMo]=useState(()=>{
-    if(firstAvailable){const [,m]=firstAvailable.split("-");return +m-1;}
-    return t.getMonth();
-  });
+  const [yr,setYr]=useState(()=>{if(firstAvailable){const [y]=firstAvailable.split("-");return +y;}return t.getFullYear();});
+  const [mo,setMo]=useState(()=>{if(firstAvailable){const [,m]=firstAvailable.split("-");return +m-1;}return t.getMonth();});
   const todayS=todayStr();
   return (
     <div>
@@ -412,21 +439,10 @@ function Calendar({selected,onSelect,bookedDates=[],unavailableDates=[],firstAva
         {Array(daysIn(yr,mo)).fill(null).map((_,i)=>{
           const d=i+1;
           const s=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-          const isPast=s<todayS;
-          const isUnavail=unavailableDates.includes(s);
-          const isSel=s===selected;
-          const isFirst=s===firstAvailable&&!isSel;
-          const isDisabled=isPast||isUnavail;
+          const isPast=s<todayS;const isUnavail=unavailableDates.includes(s);const isSel=s===selected;
+          const isFirst=s===firstAvailable&&!isSel;const isDisabled=isPast||isUnavail;
           return (
-            <div key={d} onClick={()=>!isDisabled&&onSelect(s)} style={{
-              textAlign:"center",padding:"9px 2px",borderRadius:8,position:"relative",
-              cursor:isDisabled?"default":"pointer",
-              background:isSel?C.accent:isFirst?"#3a2848":"transparent",
-              color:isSel?"#fff":isDisabled?C.borderLight:isFirst?C.accent:C.text,
-              fontWeight:isSel?600:isFirst?600:400,
-              fontSize:13,transition:"all .15s",
-              opacity:isUnavail?.35:1,
-            }}>
+            <div key={d} onClick={()=>!isDisabled&&onSelect(s)} style={{textAlign:"center",padding:"9px 2px",borderRadius:8,position:"relative",cursor:isDisabled?"default":"pointer",background:isSel?C.accent:isFirst?"#3a2848":"transparent",color:isSel?"#fff":isDisabled?C.borderLight:isFirst?C.accent:C.text,fontWeight:isSel?600:isFirst?600:400,fontSize:13,transition:"all .15s",opacity:isUnavail?.35:1}}>
               {d}
               {isFirst&&!isSel&&<div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",fontSize:6,color:C.accent}}>●</div>}
             </div>
@@ -437,63 +453,28 @@ function Calendar({selected,onSelect,bookedDates=[],unavailableDates=[],firstAva
   );
 }
 
-// ── RESET PASSWORD VIEW ──────────────────────────────────────────────────────
-function ResetPasswordView({accessToken, onDone}) {
-  const [pw1, setPw1] = useState("");
-  const [pw2, setPw2] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState("");
-  const [success, setSuccess] = useState(false);
-
-  const submit = async () => {
-    setErr("");
-    if(pw1.length < 6){ setErr("Le mot de passe doit faire au moins 6 caractères."); return; }
-    if(pw1 !== pw2){ setErr("Les mots de passe ne correspondent pas."); return; }
-    setLoading(true);
-    const res = await updateClientPassword(accessToken, pw1);
-    setLoading(false);
-    if(res.ok){
-      setSuccess(true);
-      setTimeout(() => onDone(), 2000);
-    } else {
-      setErr(res.error);
-    }
-  };
-
-  if(success) return (
-    <div className="fu" style={{textAlign:"center",padding:"60px 20px"}}>
-      <div style={{width:56,height:56,borderRadius:"50%",background:C.accentLight,border:`1.5px solid ${C.accent}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px",color:C.accentDark,fontSize:22}}>✓</div>
-      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,marginBottom:10}}>Mot de passe modifié</div>
-      <div style={{fontSize:14,color:C.textMid}}>Vous pouvez maintenant vous connecter.</div>
-    </div>
-  );
-
+function ResetPasswordView({accessToken,onDone}) {
+  const [pw1,setPw1]=useState("");const [pw2,setPw2]=useState("");const [loading,setLoading]=useState(false);const [err,setErr]=useState("");const [success,setSuccess]=useState(false);
+  const submit=async()=>{setErr("");if(pw1.length<6){setErr("Le mot de passe doit faire au moins 6 caractères.");return;}if(pw1!==pw2){setErr("Les mots de passe ne correspondent pas.");return;}setLoading(true);const res=await updateClientPassword(accessToken,pw1);setLoading(false);if(res.ok){setSuccess(true);setTimeout(()=>onDone(),2000);}else setErr(res.error);};
+  if(success) return (<div className="fu" style={{textAlign:"center",padding:"60px 20px"}}><div style={{width:56,height:56,borderRadius:"50%",background:C.accentLight,border:`1.5px solid ${C.accent}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px",color:C.accentDark,fontSize:22}}>✓</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,marginBottom:10}}>Mot de passe modifié</div><div style={{fontSize:14,color:C.textMid}}>Vous pouvez maintenant vous connecter.</div></div>);
   return (
     <div className="fu" style={{maxWidth:400,margin:"0 auto",padding:"60px 20px"}}>
       <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,marginBottom:8}}>Nouveau mot de passe</div>
       <div style={{fontSize:13,color:C.textMid,marginBottom:24}}>Choisissez un nouveau mot de passe pour votre compte.</div>
-      <div style={{marginBottom:12}}>
-        <Lbl>Nouveau mot de passe</Lbl>
-        <Inp value={pw1} onChange={e=>setPw1(e.target.value)} type="password" placeholder="••••••••" autoComplete="new-password"/>
-      </div>
-      <div style={{marginBottom:14}}>
-        <Lbl>Confirmer le mot de passe</Lbl>
-        <Inp value={pw2} onChange={e=>setPw2(e.target.value)} type="password" placeholder="••••••••" autoComplete="new-password"/>
-      </div>
-      {err && <div style={{fontSize:13,color:"#c05050",marginBottom:14,padding:"10px 14px",background:"#fff0f0",borderRadius:8}}>{err}</div>}
+      <div style={{marginBottom:12}}><Lbl>Nouveau mot de passe</Lbl><Inp value={pw1} onChange={e=>setPw1(e.target.value)} type="password" placeholder="••••••••" autoComplete="new-password"/></div>
+      <div style={{marginBottom:14}}><Lbl>Confirmer le mot de passe</Lbl><Inp value={pw2} onChange={e=>setPw2(e.target.value)} type="password" placeholder="••••••••" autoComplete="new-password"/></div>
+      {err&&<div style={{fontSize:13,color:"#c05050",marginBottom:14,padding:"10px 14px",background:"#fff0f0",borderRadius:8}}>{err}</div>}
       <PBtn onClick={submit} disabled={loading}>{loading?"Mise à jour…":"Valider"}</PBtn>
     </div>
   );
 }
 
-// ── AUTH MODAL ────────────────────────────────────────────────────────────────
 function AuthModal({onAuth,onClose,booking}) {
   const [mode,setMode]=useState("login");
   const [email,setEmail]=useState(()=>localStorage.getItem("nlb_email")||""),[pw,setPw]=useState("");
   const [prenom,setPrenom]=useState(""),[nom,setNom]=useState(""),[tel,setTel]=useState("");
   const [loading,setLoading]=useState(false),[err,setErr]=useState("");
   const [resetMsg,setResetMsg]=useState(""),[resetLoading,setResetLoading]=useState(false);
-
   const submit=async()=>{
     setErr("");setLoading(true);
     try {
@@ -501,7 +482,7 @@ function AuthModal({onAuth,onClose,booking}) {
         const res=await api.signIn(email,pw);
         if(res.error){setErr("Email ou mot de passe incorrect.");setLoading(false);return;}
         const prof=await fetch(`${SUPA_URL}/rest/v1/profiles?id=eq.${res.user.id}&select=*`,{headers:{"apikey":SUPA_PUB,"Authorization":`Bearer ${res.access_token}`}}).then(r=>r.json());
-        localStorage.setItem("nlb_email", email);
+        localStorage.setItem("nlb_email",email);
         onAuth({user:res.user,token:res.access_token,refresh_token:res.refresh_token,expires_at:res.expires_at,profile:prof[0]||{}});
       } else {
         if(!prenom||!nom||!tel){setErr("Tous les champs sont requis.");setLoading(false);return;}
@@ -515,53 +496,21 @@ function AuthModal({onAuth,onClose,booking}) {
     } catch{setErr("Erreur réseau.");}
     setLoading(false);
   };
-
   return (
     <div className="fi" style={{position:"fixed",inset:0,zIndex:500,display:"flex",alignItems:"flex-end",background:"rgba(38,25,14,.42)",backdropFilter:"blur(6px)"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="su" style={{width:"100%",maxHeight:"92vh",overflowY:"auto",background:C.surface,borderRadius:"24px 24px 0 0",padding:"28px 24px 52px",boxShadow:"0 -8px 40px rgba(0,0,0,.1)"}}>
         <div style={{width:36,height:4,borderRadius:2,background:C.border,margin:"0 auto 28px"}}/>
-        {booking&&(
-          <div style={{background:C.accentLight,borderRadius:14,padding:"14px 18px",marginBottom:24,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <div style={{fontSize:14,fontWeight:600,color:C.accentDark}}>{booking.nom}</div>
-              <div style={{fontSize:12,color:C.textMid,marginTop:2}}>{fmtLong(booking.date)} · {booking.slot}</div>
-            </div>
-            <div style={{fontSize:16,fontWeight:700,color:C.accentDark}}>{booking.prix>0?`${booking.prix} €`:"Gratuit"}</div>
-          </div>
-        )}
+        {booking&&(<div style={{background:C.accentLight,borderRadius:14,padding:"14px 18px",marginBottom:24,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:14,fontWeight:600,color:C.accentDark}}>{booking.nom}</div><div style={{fontSize:12,color:C.textMid,marginTop:2}}>{fmtLong(booking.date)} · {booking.slot}</div></div><div style={{fontSize:16,fontWeight:700,color:C.accentDark}}>{booking.prix>0?`${booking.prix} €`:"Gratuit"}</div></div>)}
         <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,marginBottom:4}}>{mode==="login"?"Connexion":"Créer un compte"}</div>
         <div style={{fontSize:13,color:C.textMid,marginBottom:22}}>{mode==="login"?"Vos infos seront pré-remplies automatiquement.":"Un compte pour gérer vos rendez-vous."}</div>
         <div style={{display:"flex",background:C.surfaceAlt,borderRadius:10,padding:4,marginBottom:20}}>
-          {[["login","Se connecter"],["signup","Créer un compte"]].map(([id,label])=>(
-            <button key={id} onClick={()=>{setMode(id);setErr("");}} style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:mode===id?C.surface:"transparent",color:mode===id?C.text:C.textMid,fontSize:13,fontWeight:mode===id?600:400,boxShadow:mode===id?"0 1px 6px rgba(0,0,0,.07)":"none",transition:"all .2s",cursor:"pointer"}}>{label}</button>
-          ))}
+          {[["login","Se connecter"],["signup","Créer un compte"]].map(([id,label])=>(<button key={id} onClick={()=>{setMode(id);setErr("");}} style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:mode===id?C.surface:"transparent",color:mode===id?C.text:C.textMid,fontSize:13,fontWeight:mode===id?600:400,boxShadow:mode===id?"0 1px 6px rgba(0,0,0,.07)":"none",transition:"all .2s",cursor:"pointer"}}>{label}</button>))}
         </div>
-        {mode==="signup"&&(
-          <div className="fu">
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:0}}>
-              <div style={{marginBottom:12}}><Lbl>Prénom</Lbl><Inp value={prenom} onChange={e=>setPrenom(e.target.value)} placeholder="Marie"/></div>
-              <div style={{marginBottom:12}}><Lbl>Nom</Lbl><Inp value={nom} onChange={e=>setNom(e.target.value)} placeholder="Dupont"/></div>
-            </div>
-            <div style={{marginBottom:12}}><Lbl>Téléphone</Lbl><Inp value={tel} onChange={e=>setTel(e.target.value)} placeholder="06 00 00 00 00" type="tel"/></div>
-          </div>
-        )}
+        {mode==="signup"&&(<div className="fu"><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:0}}><div style={{marginBottom:12}}><Lbl>Prénom</Lbl><Inp value={prenom} onChange={e=>setPrenom(e.target.value)} placeholder="Marie"/></div><div style={{marginBottom:12}}><Lbl>Nom</Lbl><Inp value={nom} onChange={e=>setNom(e.target.value)} placeholder="Dupont"/></div></div><div style={{marginBottom:12}}><Lbl>Téléphone</Lbl><Inp value={tel} onChange={e=>setTel(e.target.value)} placeholder="06 00 00 00 00" type="tel"/></div></div>)}
         <div style={{marginBottom:12}}><Lbl>Email</Lbl><Inp value={email} onChange={e=>setEmail(e.target.value)} placeholder="marie@email.fr" type="email"/></div>
         <div style={{marginBottom:12}}><Lbl>Mot de passe</Lbl><Inp value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••••" type="password"/></div>
-        {mode==="login"&&(
-              <div style={{marginBottom:14,marginTop:-8,textAlign:"right"}}>
-                <button type="button" onClick={async()=>{
-                  if(!email){setResetMsg("Saisis ton email d'abord.");return;}
-                  setResetLoading(true);setResetMsg("");
-                  const r=await resetClientPassword(email);
-                  setResetLoading(false);
-                  if(r.ok){setResetMsg("✓ Email envoyé ! Vérifie ta boîte (et les spams).");}
-                  else{setResetMsg("Erreur : "+r.error);}
-                }} style={{background:"none",border:"none",color:C.accentDark,fontSize:13,cursor:"pointer",textDecoration:"underline",padding:0,fontFamily:"inherit"}}>
-                  {resetLoading?"Envoi…":"Mot de passe oublié ?"}
-                </button>
-              </div>
-            )}
-            {resetMsg&&<div style={{fontSize:13,color:resetMsg.startsWith("✓")?"#2d7a4f":"#c05050",marginBottom:14,padding:"10px 14px",background:resetMsg.startsWith("✓")?"#e8f5ee":"#fff0f0",borderRadius:8}}>{resetMsg}</div>}
+        {mode==="login"&&(<div style={{marginBottom:14,marginTop:-8,textAlign:"right"}}><button type="button" onClick={async()=>{if(!email){setResetMsg("Saisis ton email d'abord.");return;}setResetLoading(true);setResetMsg("");const r=await resetClientPassword(email);setResetLoading(false);if(r.ok){setResetMsg("✓ Email envoyé ! Vérifie ta boîte (et les spams).");}else{setResetMsg("Erreur : "+r.error);}}} style={{background:"none",border:"none",color:C.accentDark,fontSize:13,cursor:"pointer",textDecoration:"underline",padding:0,fontFamily:"inherit"}}>{resetLoading?"Envoi…":"Mot de passe oublié ?"}</button></div>)}
+        {resetMsg&&<div style={{fontSize:13,color:resetMsg.startsWith("✓")?"#2d7a4f":"#c05050",marginBottom:14,padding:"10px 14px",background:resetMsg.startsWith("✓")?"#e8f5ee":"#fff0f0",borderRadius:8}}>{resetMsg}</div>}
         {err&&<div style={{fontSize:13,color:"#c05050",marginBottom:14,padding:"10px 14px",background:"#fff0f0",borderRadius:8}}>{err}</div>}
         <PBtn onClick={submit} disabled={loading}>{loading?"Chargement…":mode==="login"?booking?"Confirmer ma réservation":"Se connecter":booking?"Créer mon compte et réserver":"Créer un compte"}</PBtn>
         <div style={{textAlign:"center",fontSize:11,color:C.textLight,marginTop:14,lineHeight:1.6}}>Vos données sont utilisées uniquement pour la gestion de vos rendez-vous.</div>
@@ -570,442 +519,170 @@ function AuthModal({onAuth,onClose,booking}) {
   );
 }
 
-// ── DATE PICKER Option 1 : Calendrier + créneaux dessous ────────────────────
 function PlanityDatePicker({selPresta,allRdvs,allSupaBlocked,selectedDate,selectedSlot,onSelect}) {
-  const ALL_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  // ✏️ MODIFIÉ : créneaux semaine étendus de 17h à 20h (au lieu de 17h à 19h)
-  const SEMAINE = ["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const WEEKEND = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const DAYS_S = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
-  const MONTHS_F = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
-  const DAYS_L = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
-
-  const today = new Date();
-  const minDate = new Date(today.getTime() + 24*60*60*1000);
-  const minDateStr = minDate.toISOString().split("T")[0];
-
-  const [yr, setYr] = useState(today.getFullYear());
-  const [mo, setMo] = useState(today.getMonth());
-
-  // Calculer les créneaux dispo pour un jour donné
-  const getAvailSlots = (dateStr) => {
-    const dow = parseD(dateStr).getDay();
-    const isWE = dow===0||dow===6;
-    const allowed = isWE ? WEEKEND : SEMAINE;
-    const dur = selPresta?.duree||30;
-    const slotsNeeded = Math.ceil(dur/30);
-    const rdvsDay = allRdvs.filter(r=>r.date===dateStr&&r.statut!=="annulé");
-    const supaDay = allSupaBlocked[dateStr]||[];
-    const avail = [];
-    for(let j=0; j<=allowed.length-slotsNeeded; j++){
+  const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const SEMAINE=["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const WEEKEND=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const DAYS_S_L=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+  const MONTHS_F=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+  const DAYS_L_L=["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+  const today=new Date();const minDate=new Date(today.getTime()+24*60*60*1000);const minDateStr=minDate.toISOString().split("T")[0];
+  const [yr,setYr]=useState(today.getFullYear());const [mo,setMo]=useState(today.getMonth());
+  const getAvailSlots=(dateStr)=>{
+    const dow=parseD(dateStr).getDay();const isWE=dow===0||dow===6;const allowed=isWE?WEEKEND:SEMAINE;
+    const dur=selPresta?.duree||30;const slotsNeeded=Math.ceil(dur/30);
+    const rdvsDay=allRdvs.filter(r=>r.date===dateStr&&r.statut!=="annulé");const supaDay=allSupaBlocked[dateStr]||[];const avail=[];
+    for(let j=0;j<=allowed.length-slotsNeeded;j++){
       let ok=true;
       for(let k=0;k<slotsNeeded;k++){
-        const sl=allowed[j+k];
-        if(!sl){ok=false;break;}
-        if(supaDay.includes(sl)){ok=false;break;}
-        // Vérifier règle 24h : le créneau doit être dans plus de 24h
-        const slotDateTime = new Date(`${dateStr}T${sl}:00`);
-        if(slotDateTime.getTime() - Date.now() < 24*60*60*1000){ok=false;break;}
+        const sl=allowed[j+k];if(!sl){ok=false;break;}if(supaDay.includes(sl)){ok=false;break;}
+        const slotDateTime=new Date(`${dateStr}T${sl}:00`);if(slotDateTime.getTime()-Date.now()<24*60*60*1000){ok=false;break;}
         const idx=ALL_SLOTS.indexOf(sl);
-        for(const r of rdvsDay){
-          const rIdx=ALL_SLOTS.indexOf(r.slot);
-          const rEnd=rIdx+Math.ceil((r.duree||30)/30);
-          if(idx>=rIdx&&idx<rEnd){ok=false;break;}
-        }
+        for(const r of rdvsDay){const rIdx=ALL_SLOTS.indexOf(r.slot);const rEnd=rIdx+Math.ceil((r.duree||30)/30);if(idx>=rIdx&&idx<rEnd){ok=false;break;}}
         if(!ok)break;
       }
-      if(ok) avail.push(allowed[j]);
+      if(ok)avail.push(allowed[j]);
     }
     return avail;
   };
-
-  // Auto-sélectionner le premier jour dispo au chargement
   useEffect(()=>{
-    if(selectedDate) return;
-    const d = new Date(minDate);
-    for(let i=0;i<49;i++){
-      const s = new Date(d.getTime()+i*86400000).toISOString().split("T")[0];
-      if(getAvailSlots(s).length>0){
-        const [y,m] = s.split("-");
-        setYr(+y); setMo(+m-1);
-        onSelect(s, null);
-        break;
-      }
-    }
+    if(selectedDate)return;
+    const d=new Date(minDate);
+    for(let i=0;i<49;i++){const s=new Date(d.getTime()+i*86400000).toISOString().split("T")[0];if(getAvailSlots(s).length>0){const[y,m]=s.split("-");setYr(+y);setMo(+m-1);onSelect(s,null);break;}}
   },[selPresta]);
-
-  const firstDayOfMonth = (new Date(yr,mo,1).getDay()||7)-1;
-  const daysInMonth = new Date(yr,mo+1,0).getDate();
-  const selectedSlots = selectedDate ? getAvailSlots(selectedDate) : [];
-
+  const firstDayOfMonth=(new Date(yr,mo,1).getDay()||7)-1;const daysInMonth=new Date(yr,mo+1,0).getDate();const selectedSlots=selectedDate?getAvailSlots(selectedDate):[];
   return (
     <div>
-     {/* Calendrier */}
       <div style={{background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"20px 18px",marginBottom:16}}>
-        {/* Nav mois — limité à 49 jours côté cliente */}
-        {(() => {
-          const maxDate = new Date(today.getTime() + 49*24*60*60*1000);
-          const maxYr = maxDate.getFullYear();
-          const maxMo = maxDate.getMonth();
-          const nextDisabled = (yr > maxYr) || (yr === maxYr && mo >= maxMo);
-          const prevDisabled = (yr < today.getFullYear()) || (yr === today.getFullYear() && mo <= today.getMonth());
-          return (
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
-              <button
-                onClick={()=>{ if(prevDisabled) return; mo===0?(setMo(11),setYr(yr-1)):setMo(mo-1); }}
-                disabled={prevDisabled}
-                style={{background:"none",border:"none",color:prevDisabled?C.borderLight:C.textLight,fontSize:22,cursor:prevDisabled?"default":"pointer",padding:"0 8px",opacity:prevDisabled?.3:1}}
-              >‹</button>
-              <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:17,color:C.text,letterSpacing:.5}}>{MONTHS_F[mo]} {yr}</span>
-              <button
-                onClick={()=>{ if(nextDisabled) return; mo===11?(setMo(0),setYr(yr+1)):setMo(mo+1); }}
-                disabled={nextDisabled}
-                style={{background:"none",border:"none",color:nextDisabled?C.borderLight:C.textLight,fontSize:22,cursor:nextDisabled?"default":"pointer",padding:"0 8px",opacity:nextDisabled?.3:1}}
-              >›</button>
-            </div>
-          );
+        {(()=>{
+          const maxDate=new Date(today.getTime()+49*24*60*60*1000);const maxYr=maxDate.getFullYear();const maxMo=maxDate.getMonth();
+          const nextDisabled=(yr>maxYr)||(yr===maxYr&&mo>=maxMo);const prevDisabled=(yr<today.getFullYear())||(yr===today.getFullYear()&&mo<=today.getMonth());
+          return (<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:18}}>
+            <button onClick={()=>{if(prevDisabled)return;mo===0?(setMo(11),setYr(yr-1)):setMo(mo-1);}} disabled={prevDisabled} style={{background:"none",border:"none",color:prevDisabled?C.borderLight:C.textLight,fontSize:22,cursor:prevDisabled?"default":"pointer",padding:"0 8px",opacity:prevDisabled?.3:1}}>‹</button>
+            <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:17,color:C.text,letterSpacing:.5}}>{MONTHS_F[mo]} {yr}</span>
+            <button onClick={()=>{if(nextDisabled)return;mo===11?(setMo(0),setYr(yr+1)):setMo(mo+1);}} disabled={nextDisabled} style={{background:"none",border:"none",color:nextDisabled?C.borderLight:C.textLight,fontSize:22,cursor:nextDisabled?"default":"pointer",padding:"0 8px",opacity:nextDisabled?.3:1}}>›</button>
+          </div>);
         })()}
-        {/* Jours semaine */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:8}}>
-          {DAYS_S.map(d=><div key={d} style={{textAlign:"center",fontSize:10,color:C.textLight,fontWeight:500,letterSpacing:.8,textTransform:"uppercase",paddingBottom:8}}>{d}</div>)}
+          {DAYS_S_L.map(d=><div key={d} style={{textAlign:"center",fontSize:10,color:C.textLight,fontWeight:500,letterSpacing:.8,textTransform:"uppercase",paddingBottom:8}}>{d}</div>)}
         </div>
-        {/* Cases */}
         <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"4px 0"}}>
           {Array(firstDayOfMonth).fill(null).map((_,i)=><div key={`e${i}`}/>)}
           {Array(daysInMonth).fill(null).map((_,i)=>{
-            const d=i+1;
-            const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-            const isPast=ds<minDateStr; // minDateStr = demain si avant l'heure min
-            const avail=!isPast?getAvailSlots(ds):[];
-            const hasDispo=avail.length>0;
-            const isSel=ds===selectedDate;
-            return (
-              <div key={d} onClick={()=>hasDispo&&!isPast&&onSelect(ds,null)} style={{
-                textAlign:"center", padding:"8px 2px", borderRadius:8, position:"relative",
-                cursor:hasDispo&&!isPast?"pointer":"default",
-                background:isSel?C.accent:"transparent",
-                color:isSel?"#fff":isPast||!hasDispo?"#3a3040":C.text,
-                fontWeight:isSel?700:400, fontSize:13, transition:"all .15s",
-              }}>
-                {d}
-                {/* Point si dispo */}
-                {hasDispo&&!isSel&&(
-                  <div style={{width:4,height:4,borderRadius:"50%",background:C.accent,position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)"}}/>
-                )}
-              </div>
-            );
+            const d=i+1;const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+            const isPast=ds<minDateStr;const avail=!isPast?getAvailSlots(ds):[];const hasDispo=avail.length>0;const isSel=ds===selectedDate;
+            return (<div key={d} onClick={()=>hasDispo&&!isPast&&onSelect(ds,null)} style={{textAlign:"center",padding:"8px 2px",borderRadius:8,position:"relative",cursor:hasDispo&&!isPast?"pointer":"default",background:isSel?C.accent:"transparent",color:isSel?"#fff":isPast||!hasDispo?"#3a3040":C.text,fontWeight:isSel?700:400,fontSize:13,transition:"all .15s"}}>
+              {d}{hasDispo&&!isSel&&<div style={{width:4,height:4,borderRadius:"50%",background:C.accent,position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)"}}/>}
+            </div>);
           })}
         </div>
       </div>
-
-      {/* Créneaux du jour sélectionné */}
-      {selectedDate&&selectedSlots.length>0&&(
-        <div className="fu">
-          <div style={{fontSize:12,color:C.textMid,marginBottom:12}}>
-            {DAYS_L[parseD(selectedDate).getDay()]} {parseD(selectedDate).getDate()} {MONTHS_F[parseD(selectedDate).getMonth()]}
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-            {selectedSlots.map(s=>{
-              const active=selectedSlot===s;
-              return (
-                <div key={s} onClick={()=>onSelect(selectedDate,s)} style={{
-                  padding:"12px 4px",textAlign:"center",borderRadius:10,
-                  border:`1.5px solid ${active?C.accent:C.border}`,
-                  background:active?C.accent:C.surface,
-                  color:active?"#fff":C.textMid,
-                  fontSize:13,fontWeight:active?700:400,
-                  cursor:"pointer",transition:"all .15s",
-                }}>
-                  {s}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-      {selectedDate&&selectedSlots.length===0&&(
-        <div style={{textAlign:"center",padding:"16px",fontSize:13,color:C.textLight}}>
-          Aucun créneau disponible ce jour.
-        </div>
-      )}
+      {selectedDate&&selectedSlots.length>0&&(<div className="fu"><div style={{fontSize:12,color:C.textMid,marginBottom:12}}>{DAYS_L_L[parseD(selectedDate).getDay()]} {parseD(selectedDate).getDate()} {MONTHS_F[parseD(selectedDate).getMonth()]}</div><div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>{selectedSlots.map(s=>{const active=selectedSlot===s;return(<div key={s} onClick={()=>onSelect(selectedDate,s)} style={{padding:"12px 4px",textAlign:"center",borderRadius:10,border:`1.5px solid ${active?C.accent:C.border}`,background:active?C.accent:C.surface,color:active?"#fff":C.textMid,fontSize:13,fontWeight:active?700:400,cursor:"pointer",transition:"all .15s"}}>{s}</div>);})}</div></div>)}
+      {selectedDate&&selectedSlots.length===0&&<div style={{textAlign:"center",padding:"16px",fontSize:13,color:C.textLight}}>Aucun créneau disponible ce jour.</div>}
     </div>
   );
 }
 
-// ── RÉSERVATION ───────────────────────────────────────────────────────────────
-// — BLOC ADRESSE & ARRIVÉE (réutilisable)
 function AdresseBlock(){
-  const adresse = "9 rue André Saves, 31300 Toulouse";
-  const adresseEncoded = encodeURIComponent(adresse);
-  const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${adresseEncoded}`;
-  const wazeUrl = `https://waze.com/ul?q=${adresseEncoded}&navigate=yes`;
-  const instaUrl = "https://ig.me/m/neylika31";
-  const smsUrl = "sms:+33680894349";
-  const btnNeutre = {
-    display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-    padding:"11px", background:C.surfaceAlt, border:`1px solid ${C.border}`,
-    borderRadius:10, fontSize:13, color:C.textMid, textDecoration:"none", fontWeight:500,
-  };
-  const btnAccent = {
-    ...btnNeutre, background:C.accentLight, border:`1px solid ${C.accentDark}`, color:C.accent,
-  };
+  const adresse="9 rue André Saves, 31300 Toulouse";const adresseEncoded=encodeURIComponent(adresse);
+  const mapsUrl=`https://www.google.com/maps/search/?api=1&query=${adresseEncoded}`;const wazeUrl=`https://waze.com/ul?q=${adresseEncoded}&navigate=yes`;
+  const instaUrl="https://ig.me/m/neylika31";const smsUrl="sms:+33680894349";
+  const btnN={display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"11px",background:C.surfaceAlt,border:`1px solid ${C.border}`,borderRadius:10,fontSize:13,color:C.textMid,textDecoration:"none",fontWeight:500};
+  const btnA={...btnN,background:C.accentLight,border:`1px solid ${C.accentDark}`,color:C.accent};
   return (
-    <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:14, padding:"18px 20px", marginTop:20}}>
-      <div style={{display:"flex", alignItems:"center", gap:8, marginBottom:14}}>
-        <span style={{fontSize:18, color:C.accent}}>📍</span>
-        <div style={{fontWeight:500, fontSize:14, color:C.text, letterSpacing:"0.3px"}}>Adresse du rendez-vous</div>
+    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:14,padding:"18px 20px",marginTop:20}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span style={{fontSize:18,color:C.accent}}>📍</span><div style={{fontWeight:500,fontSize:14,color:C.text}}>Adresse du rendez-vous</div></div>
+      <div style={{fontSize:16,marginBottom:4,color:C.text,fontWeight:500}}>9 rue André Saves</div>
+      <div style={{fontSize:14,marginBottom:16,color:C.textLight}}>31300 Toulouse</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:18}}>
+        <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={btnN}>🗺️ Maps</a>
+        <a href={wazeUrl} target="_blank" rel="noopener noreferrer" style={btnN}>🧭 Waze</a>
       </div>
-      <div style={{fontSize:16, marginBottom:4, color:C.text, fontWeight:500}}>9 rue André Saves</div>
-      <div style={{fontSize:14, marginBottom:16, color:C.textLight}}>31300 Toulouse</div>
-      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:18}}>
-        <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={btnNeutre}>🗺️ Maps</a>
-        <a href={wazeUrl} target="_blank" rel="noopener noreferrer" style={btnNeutre}>🧭 Waze</a>
-      </div>
-      <div style={{borderTop:`1px solid ${C.borderLight}`, paddingTop:14}}>
-        <div style={{display:"flex", alignItems:"flex-start", gap:8, marginBottom:12}}>
-          <span style={{fontSize:16, color:C.accent, marginTop:2}}>🔔</span>
-          <div style={{fontSize:13, color:C.textMid, lineHeight:1.5}}>Préviens-moi quand tu arrives 💜</div>
-        </div>
-        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:8}}>
-          <a href={instaUrl} target="_blank" rel="noopener noreferrer" style={btnAccent}>📷 Instagram</a>
-          <a href={smsUrl} style={btnNeutre}>💬 SMS</a>
+      <div style={{borderTop:`1px solid ${C.borderLight}`,paddingTop:14}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12}}><span style={{fontSize:16,color:C.accent,marginTop:2}}>🔔</span><div style={{fontSize:13,color:C.textMid,lineHeight:1.5}}>Préviens-moi quand tu arrives 💜</div></div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          <a href={instaUrl} target="_blank" rel="noopener noreferrer" style={btnA}>📷 Instagram</a>
+          <a href={smsUrl} style={btnN}>💬 SMS</a>
         </div>
       </div>
     </div>
   );
 }
+
 function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
-  const [svcId,setSvcId]=useState(null);
-  const [openSub,setOpenSub]=useState(null);
-  const [selPresta,setSelPresta]=useState(null);
-  const [date,setDate]=useState("");
-  const [slot,setSlot]=useState("");
-  const [showAuth,setShowAuth]=useState(false);
-  const [done,setDone]=useState(null);
-
+  const [svcId,setSvcId]=useState(null);const [openSub,setOpenSub]=useState(null);const [selPresta,setSelPresta]=useState(null);
+  const [date,setDate]=useState("");const [slot,setSlot]=useState("");const [showAuth,setShowAuth]=useState(false);const [done,setDone]=useState(null);
+  const [showSprayModal,setShowSprayModal]=useState(false);
   const svc=svcId?SERVICES.find(s=>s.id===svcId):null;
-  const ALL_SLOTS_RES = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  // ✏️ MODIFIÉ : créneaux semaine étendus de 17h à 20h
-  const SEMAINE_RES = ["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const WEEKEND_RES = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const [supaBlocked, setSupaBlocked] = useState([]);
-  const [allSupaBlocked, setAllSupaBlocked] = useState({}); // {date: [slots]}
-
-  // Charger tous les blocages Supabase une fois la prestation choisie
-  useEffect(()=>{
-    if(!selPresta) return;
-    api.get("blocked_slots","select=date,slot").then(d=>{
-      if(!Array.isArray(d)) return;
-      const map={};
-      d.forEach(r=>{ if(!map[r.date])map[r.date]=[]; map[r.date].push(r.slot); });
-      setAllSupaBlocked(map);
-    });
-  },[selPresta]);
-
-  useEffect(()=>{
-    if(!date) return;
-    api.get("blocked_slots",`date=eq.${date}&select=slot`).then(d=>{
-      if(Array.isArray(d)) setSupaBlocked(d.map(r=>r.slot));
-    });
-  },[date]);
-
-  // Calculer si un jour est dispo pour la durée de la prestation
-  const isDayAvailable = (dateStr) => {
-    if(!selPresta) return true;
-    const dow = parseD(dateStr).getDay();
-    const isWE = dow===0||dow===6;
-    const allowed = isWE ? WEEKEND_RES : SEMAINE_RES;
-    const dur = selPresta.duree||30;
-    const slotsNeeded = Math.ceil(dur/30);
-    const rdvsDay = allRdvs.filter(r=>r.date===dateStr&&r.statut!=="annulé");
-    const supaDay = allSupaBlocked[dateStr]||[];
-    // Pour chaque slot autorisé, vérifier si on peut caser la durée
-    for(let i=0;i<=allowed.length-slotsNeeded;i++){
-      let ok=true;
-      for(let j=0;j<slotsNeeded;j++){
-        const s=allowed[i+j];
-        if(supaDay.includes(s)){ok=false;break;}
-        // Vérifier si ce slot est pris par un RDV existant
-        const idx=ALL_SLOTS_RES.indexOf(s);
-        for(const r of rdvsDay){
-          const rIdx=ALL_SLOTS_RES.indexOf(r.slot);
-          const rEnd=rIdx+Math.ceil((r.duree||30)/30);
-          if(idx>=rIdx&&idx<rEnd){ok=false;break;}
-        }
-        if(!ok)break;
-      }
-      if(ok) return true;
-    }
+  const ALL_SLOTS_RES=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const SEMAINE_RES=["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const WEEKEND_RES=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const [supaBlocked,setSupaBlocked]=useState([]);const [allSupaBlocked,setAllSupaBlocked]=useState({});
+  useEffect(()=>{if(!selPresta)return;api.get("blocked_slots","select=date,slot").then(d=>{if(!Array.isArray(d))return;const map={};d.forEach(r=>{if(!map[r.date])map[r.date]=[];map[r.date].push(r.slot);});setAllSupaBlocked(map);});},[selPresta]);
+  useEffect(()=>{if(!date)return;api.get("blocked_slots",`date=eq.${date}&select=slot`).then(d=>{if(Array.isArray(d))setSupaBlocked(d.map(r=>r.slot));});},[date]);
+  const isDayAvailable=(dateStr)=>{
+    if(!selPresta)return true;const dow=parseD(dateStr).getDay();const isWE=dow===0||dow===6;const allowed=isWE?WEEKEND_RES:SEMAINE_RES;
+    const dur=selPresta.duree||30;const slotsNeeded=Math.ceil(dur/30);const rdvsDay=allRdvs.filter(r=>r.date===dateStr&&r.statut!=="annulé");const supaDay=allSupaBlocked[dateStr]||[];
+    for(let i=0;i<=allowed.length-slotsNeeded;i++){let ok=true;for(let j=0;j<slotsNeeded;j++){const s=allowed[i+j];if(supaDay.includes(s)){ok=false;break;}const idx=ALL_SLOTS_RES.indexOf(s);for(const r of rdvsDay){const rIdx=ALL_SLOTS_RES.indexOf(r.slot);const rEnd=rIdx+Math.ceil((r.duree||30)/30);if(idx>=rIdx&&idx<rEnd){ok=false;break;}}if(!ok)break;}if(ok)return true;}
     return false;
   };
-
-  // Calculer les jours indisponibles et le premier dispo sur 60 jours
-  const {unavailableDates, firstAvailable} = (() => {
-    if(!selPresta) return {unavailableDates:[], firstAvailable:null};
-    const unavail=[];
-    let first=null;
-    const today=new Date();
-    for(let i=0;i<49;i++){
-      const d=new Date(today);
-      d.setDate(today.getDate()+i);
-      const s=d.toISOString().split("T")[0];
-      if(isDayAvailable(s)){
-        if(!first) first=s;
-      } else {
-        unavail.push(s);
-      }
-    }
-    return {unavailableDates:unavail, firstAvailable:first};
+  const {unavailableDates,firstAvailable}=(()=>{
+    if(!selPresta)return{unavailableDates:[],firstAvailable:null};
+    const unavail=[];let first=null;const today=new Date();
+    for(let i=0;i<49;i++){const d=new Date(today);d.setDate(today.getDate()+i);const s=d.toISOString().split("T")[0];if(isDayAvailable(s)){if(!first)first=s;}else{unavail.push(s);}}
+    return{unavailableDates:unavail,firstAvailable:first};
   })();
-
-  // Auto-sélectionner le premier jour dispo quand on choisit une prestation
-  useEffect(()=>{
-    if(firstAvailable&&!date) setDate(firstAvailable);
-  },[firstAvailable]);
-  const takenSlots = (() => {
-    const blocked = new Set();
-    if(date) {
-      const dow = parseD(date).getDay();
-      const isWE = dow===0||dow===6;
-      const allowed = isWE ? WEEKEND_RES : SEMAINE_RES;
-      ALL_SLOTS_RES.forEach(s=>{ if(!allowed.includes(s)) blocked.add(s); });
-    }
-    supaBlocked.forEach(s=>blocked.add(s));
-    allRdvs.filter(r=>r.date===date&&r.statut!=="annulé").forEach(r=>{
-      const idx=ALL_SLOTS_RES.indexOf(r.slot);
-      if(idx===-1) return;
-      let mins=0;
-      for(let i=idx;i<ALL_SLOTS_RES.length&&mins<(r.duree||30);i++){blocked.add(ALL_SLOTS_RES[i]);mins+=30;}
-    });
-    return blocked;
-  })();
-
-  const r2=useRef(null),r3=useRef(null),r4=useRef(null),r5=useRef(null),doneRef=useRef(null);
+  useEffect(()=>{if(firstAvailable&&!date)setDate(firstAvailable);},[firstAvailable]);
+  const takenSlots=(()=>{const blocked=new Set();if(date){const dow=parseD(date).getDay();const isWE=dow===0||dow===6;const allowed=isWE?WEEKEND_RES:SEMAINE_RES;ALL_SLOTS_RES.forEach(s=>{if(!allowed.includes(s))blocked.add(s);});}supaBlocked.forEach(s=>blocked.add(s));allRdvs.filter(r=>r.date===date&&r.statut!=="annulé").forEach(r=>{const idx=ALL_SLOTS_RES.indexOf(r.slot);if(idx===-1)return;let mins=0;for(let i=idx;i<ALL_SLOTS_RES.length&&mins<(r.duree||30);i++){blocked.add(ALL_SLOTS_RES[i]);mins+=30;}});return blocked;})();
+  const r2=useRef(null),r3=useRef(null),r5=useRef(null),doneRef=useRef(null);
   const sc=(ref,d=100)=>setTimeout(()=>ref.current?.scrollIntoView({behavior:"smooth",block:"start"}),d);
-
   const isLocked=(s)=>s.locked&&!laserUnlocked;
-
-  const [confirming, setConfirming] = useState(false);
-  const [confirmError, setConfirmError] = useState("");
+  const [confirming,setConfirming]=useState(false);const [confirmError,setConfirmError]=useState("");
   const handleConfirm=async(sess)=>{
-    setShowAuth(false);
-    if(!selPresta||!date||!slot)return;
-    if(confirming) return; // anti double-clic
-    setConfirming(true);
-    setConfirmError("");
-    try {
-      // FIX CRITIQUE : recharger les RDV LIVE depuis Supabase juste avant de réserver
-      // pour s'assurer que personne d'autre n'a pris le même créneau entre-temps
-      const liveRdvs = await api.get("rdvs", `date=eq.${date}&statut=neq.annulé&select=slot,duree`);
-      if(Array.isArray(liveRdvs)){
-        const ALL = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-        const wantedIdx = ALL.indexOf(slot);
-        const wantedSlotsNeeded = Math.ceil((selPresta.duree||30)/30);
-        // Calculer tous les créneaux occupés par les RDV existants
-        for(const r of liveRdvs){
-          const rIdx = ALL.indexOf(r.slot);
-          if(rIdx === -1) continue;
-          const rEnd = rIdx + Math.ceil((r.duree||30)/30);
-          // Y a-t-il un chevauchement avec le créneau demandé ?
-          const wantedEnd = wantedIdx + wantedSlotsNeeded;
-          if(wantedIdx < rEnd && wantedEnd > rIdx){
-            setConfirmError("Désolée, ce créneau vient d'être réservé par quelqu'un d'autre. Choisissez-en un autre.");
-            // Rafraîchir la liste pour que l'UI se mette à jour
-            api.get("rdvs","select=*&order=date.asc").then(d=>{if(Array.isArray(d)&&onBooked){/* refresh externe */}});
-            setSlot(""); // forcer la cliente à choisir un nouveau créneau
-            setConfirming(false);
-            return;
-          }
-        }
-      }
-
-      const rdv={
-        user_id:sess.user.id,cat_id:svcId,service:svc.label,
-        prestation:selPresta.nom,duree:selPresta.duree,
-        prix:selPresta.prix||0,acompte:selPresta.acompte,
-        date,slot,
-        client_prenom:sess.profile.prenom,client_nom:sess.profile.nom,
-        client_tel:sess.profile.tel,client_email:sess.user.email,
-        statut:"confirmé",
-      };
+    setShowAuth(false);if(!selPresta||!date||!slot)return;if(confirming)return;setConfirming(true);setConfirmError("");
+    try{
+      const liveRdvs=await api.get("rdvs",`date=eq.${date}&statut=neq.annulé&select=slot,duree`);
+      if(Array.isArray(liveRdvs)){const ALL=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];const wantedIdx=ALL.indexOf(slot);const wantedSlotsNeeded=Math.ceil((selPresta.duree||30)/30);for(const r of liveRdvs){const rIdx=ALL.indexOf(r.slot);if(rIdx===-1)continue;const rEnd=rIdx+Math.ceil((r.duree||30)/30);const wantedEnd=wantedIdx+wantedSlotsNeeded;if(wantedIdx<rEnd&&wantedEnd>rIdx){setConfirmError("Désolée, ce créneau vient d'être réservé par quelqu'un d'autre. Choisissez-en un autre.");setSlot("");setConfirming(false);return;}}}
+      const rdv={user_id:sess.user.id,cat_id:svcId,service:svc.label,prestation:selPresta.nom,duree:selPresta.duree,prix:selPresta.prix||0,acompte:selPresta.acompte,date,slot,client_prenom:sess.profile.prenom,client_nom:sess.profile.nom,client_tel:sess.profile.tel,client_email:sess.user.email,statut:"confirmé"};
       const res=await api.post("rdvs",rdv,sess.token);
-      // Détection erreur Supabase (genre doublon UNIQUE)
-      if(res && res.code){
-        if(res.code === "23505"){
-          setConfirmError("Vous avez déjà un rendez-vous à cet horaire. Choisissez un autre créneau.");
-        } else {
-          setConfirmError("Erreur : "+(res.message||"impossible de créer le rendez-vous."));
-        }
-        setConfirming(false);
-        return;
-      }
-      const saved = Array.isArray(res) ? res[0] : res;
-      // Sécurité : vérifier que le RDV a vraiment été créé (a un id)
-      if(!saved || !saved.id){
-        setConfirmError("Erreur : le rendez-vous n'a pas pu être enregistré. Réessayez ou contactez-nous.");
-        setConfirming(false);
-        return;
-      }
-      // FIX: await sur sendEmails et sendPush pour qu'ils partent avant tout reload
-      await Promise.all([
-        sendEmails(saved, sess.user.email),
-        sendPush(`${saved.client_prenom} ${saved.client_nom}`, `${saved.prestation} · ${fmtLong(saved.date)} à ${saved.slot}`),
-      ]);
-      // Fidélité : si palier atteint, notif promo en plus
-      const promoFid = checkFidelitePromo(allRdvs, saved);
-      if(promoFid) await sendPush(`🎁 FIDÉLITÉ — ${saved.client_prenom} ${saved.client_nom}`, promoFid.msg);
-      setDone(saved);
-      onBooked(saved);
-      sc(doneRef);
-    } catch(e){
-      console.log("Erreur réservation:", e);
-      setConfirmError("Erreur réseau. Vérifiez votre connexion et réessayez.");
-    }
+      if(res&&res.code){setConfirmError(res.code==="23505"?"Vous avez déjà un rendez-vous à cet horaire. Choisissez un autre créneau.":"Erreur : "+(res.message||"impossible de créer le rendez-vous."));setConfirming(false);return;}
+      const saved=Array.isArray(res)?res[0]:res;
+      if(!saved||!saved.id){setConfirmError("Erreur : le rendez-vous n'a pas pu être enregistré. Réessayez ou contactez-nous.");setConfirming(false);return;}
+      await Promise.all([sendEmails(saved,sess.user.email),sendPush(`${saved.client_prenom} ${saved.client_nom}`,`${saved.prestation} · ${fmtLong(saved.date)} à ${saved.slot}`)]);
+      const promoFid=checkFidelitePromo(allRdvs,saved);if(promoFid)await sendPush(`🎁 FIDÉLITÉ — ${saved.client_prenom} ${saved.client_nom}`,promoFid.msg);
+      setDone(saved);onBooked(saved);sc(doneRef);
+    }catch(e){console.log("Erreur réservation:",e);setConfirmError("Erreur réseau. Vérifiez votre connexion et réessayez.");}
     setConfirming(false);
   };
-
-  const selectPresta=(p,subcat)=>{
-    if(selPresta?.id===p.id){setSelPresta(null);setDate("");setSlot("");return;}
-    setSelPresta(p);setDate("");setSlot("");sc(r3);
-  };
-
+  const selectPresta=(p)=>{if(selPresta?.id===p.id){setSelPresta(null);setDate("");setSlot("");return;}setSelPresta(p);setDate("");setSlot("");sc(r3);};
   if(done) return (
     <div ref={doneRef} className="fu" style={{textAlign:"center",padding:"52px 0"}}>
       <div style={{width:56,height:56,borderRadius:"50%",background:C.accentLight,border:`1.5px solid ${C.accent}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px",color:C.accentDark,fontSize:22}}>✓</div>
       <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.text,marginBottom:10}}>Rendez-vous confirmé</div>
       <div style={{fontSize:14,color:C.textMid,lineHeight:2,marginBottom:8}}>{done.prestation}<br/>{fmtLong(done.date)} à {done.slot}</div>
-      {/* ✏️ MODIFIÉ : suppression de l'affichage acompte côté confirmation cliente */}
       <div style={{fontSize:12,color:C.textLight,marginBottom:36,lineHeight:1.7}}>Un SMS de rappel vous sera envoyé 24h avant.</div>
       <AdresseBlock/>
-      <GBtn onClick={()=>{setDone(null);setSvcId(null);setOpenSub(null);setSelPresta(null);setDate("");setSlot("");}}>Nouvelle réservation</GBtn>
+      <GBtn onClick={()=>{setDone(null);setSvcId(null);setOpenSub(null);setSelPresta(null);setDate("");setSlot("");setShowSprayModal(false);}}>Nouvelle réservation</GBtn>
     </div>
   );
-
   return (
     <div>
+      {showSprayModal&&<SprayTanModal onConfirm={()=>{setShowSprayModal(false);sc(r2);}}/>}
       {showAuth&&<AuthModal onAuth={(s)=>{if(onAuth)onAuth(s);handleConfirm(s);}} onClose={()=>setShowAuth(false)} booking={selPresta?{nom:selPresta.nom,date,slot,prix:selPresta.prix||0}:null}/>}
-
-      {/* ── SERVICES ── */}
       <div>
         <Lbl>Choisissez un service</Lbl>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {SERVICES.map(s=>{
-            const active=svcId===s.id;
-            const locked=isLocked(s);
+            const active=svcId===s.id;const locked=isLocked(s);
             return (
               <div key={s.id} onClick={()=>{
-                const newSvc = SERVICES.find(sv=>sv.id===s.id);
-                if(svcId!==s.id){setSelPresta(null);setDate("");setSlot("");
-                  if(newSvc?.autoOpen) setOpenSub(newSvc.subcats[0].id);
-                  else setOpenSub(null);
-                }
+                const newSvc=SERVICES.find(sv=>sv.id===s.id);
+                if(svcId!==s.id){setSelPresta(null);setDate("");setSlot("");setShowSprayModal(false);if(newSvc?.autoOpen)setOpenSub(newSvc.subcats[0].id);else setOpenSub(null);}
+                if(s.id==="spray"&&svcId!==s.id){setSvcId(s.id);setShowSprayModal(true);return;}
                 setSvcId(s.id);sc(r2);
               }} style={{padding:"18px 20px",borderRadius:14,border:`1.5px solid ${active?s.color:C.border}`,background:active?s.color+"0f":C.surface,cursor:"pointer",transition:"all .2s",display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:active?"0 2px 14px rgba(0,0,0,.05)":"none"}}>
                 <div>
-                  <div style={{fontSize:15,fontWeight:600,color:active?C.text:C.textMid,display:"flex",alignItems:"center",gap:8}}>
-                    {s.label}
-                    {locked&&!active&&<span style={{fontSize:10,background:C.locked,color:C.lockedText,padding:"2px 8px",borderRadius:10,fontWeight:500}}>Consultation dispo</span>}
-                  </div>
+                  <div style={{fontSize:15,fontWeight:600,color:active?C.text:C.textMid,display:"flex",alignItems:"center",gap:8}}>{s.label}{locked&&!active&&<span style={{fontSize:10,background:C.locked,color:C.lockedText,padding:"2px 8px",borderRadius:10,fontWeight:500}}>Consultation dispo</span>}</div>
                   <div style={{fontSize:13,color:'#b8a8d0',marginTop:3}}>{s.desc}</div>
                 </div>
                 <div style={{width:8,height:8,borderRadius:"50%",background:active?s.color:C.border,flexShrink:0}}/>
@@ -1014,47 +691,32 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
           })}
         </div>
       </div>
-
-      {/* ── SOUS-CATÉGORIES ── */}
       {svc&&(
         <div ref={r2} className="fu" style={{marginTop:36}}>
           <Lbl>Prestation</Lbl>
-          {isLocked(svc)&&(
-            <div style={{marginBottom:14,padding:"12px 16px",background:C.locked+"44",border:`1px solid ${C.locked}`,borderRadius:12,fontSize:13,color:C.lockedText,lineHeight:1.6}}>
-              🔒 Les séances sont accessibles après consultation. Réservez d'abord votre consultation.
-            </div>
-          )}
+          {isLocked(svc)&&<div style={{marginBottom:14,padding:"12px 16px",background:C.locked+"44",border:`1px solid ${C.locked}`,borderRadius:12,fontSize:13,color:C.lockedText,lineHeight:1.6}}>🔒 Les séances sont accessibles après consultation. Réservez d'abord votre consultation.</div>}
           <div style={{display:"flex",flexDirection:"column",gap:8}}>
             {svc.subcats.filter(sub=>!isLocked(svc)||sub.noLock).map(sub=>{
               const isOpen=openSub===sub.id;
               return (
                 <div key={sub.id} style={{borderRadius:14,border:`1.5px solid ${isOpen?C.accent:C.border}`,overflow:"hidden",background:C.surface,transition:"all .2s"}}>
-                  {/* Header sous-cat */}
                   <div onClick={()=>setOpenSub(isOpen?null:sub.id)} style={{padding:"16px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",background:isOpen?C.accentLight:"transparent",transition:"background .2s"}}>
                     <span style={{fontSize:15,fontWeight:isOpen?600:500,color:isOpen?C.accentDark:C.text}}>{sub.label}</span>
                     <span style={{color:isOpen?C.accent:C.textLight,fontSize:18,transition:"transform .2s",display:"inline-block",transform:isOpen?"rotate(180deg)":"rotate(0deg)"}}>⌄</span>
                   </div>
-                  {/* Prestations */}
                   {isOpen&&(
                     <div>
                       {sub.note&&<div style={{padding:"10px 18px",background:C.warn,borderBottom:`1px solid ${C.warnBorder}`,fontSize:12,color:C.warnText,lineHeight:1.6}}>{sub.note}</div>}
                       {sub.prestations.map((p,i)=>{
                         const active=selPresta?.id===p.id;
                         return (
-                          <div key={p.id} onClick={()=>!p.devis&&selectPresta(p,sub)} style={{padding:"14px 18px",borderTop:i>0?`1px solid ${C.borderLight}`:"none",display:"flex",justifyContent:"space-between",alignItems:"center",background:active?C.accentLight:"transparent",cursor:p.devis?"default":"pointer",transition:"background .15s"}}>
+                          <div key={p.id} onClick={()=>!p.devis&&selectPresta(p)} style={{padding:"14px 18px",borderTop:i>0?`1px solid ${C.borderLight}`:"none",display:"flex",justifyContent:"space-between",alignItems:"center",background:active?C.accentLight:"transparent",cursor:p.devis?"default":"pointer",transition:"background .15s"}}>
                             <div>
                               <div style={{fontSize:14,fontWeight:active?600:400,color:active?C.accentDark:C.text}}>{p.nom}</div>
                               <div style={{fontSize:12,color:"#a090c0",marginTop:2}}>{p.duree} min</div>
                             </div>
                             <div style={{textAlign:"right",flexShrink:0}}>
-                              {p.devis
-                                ?<span style={{fontSize:14,fontWeight:600,color:C.lockedText}}>Sur devis</span>
-                                :<>
-                                  {p.prixNormal&&<div style={{fontSize:11,color:C.textLight,textDecoration:"line-through",marginBottom:1}}>{p.prixNormal} €</div>}
-                                  <div style={{fontSize:15,fontWeight:700,color:p.prixNormal?"#e07070":active?C.accentDark:C.textMid}}>{p.prix} €</div>
-                                  {p.prixNormal&&<div style={{fontSize:10,color:"#e07070",fontWeight:700,letterSpacing:.5}}>-50%</div>}
-                                </>
-                              }
+                              {p.devis?<span style={{fontSize:14,fontWeight:600,color:C.lockedText}}>Sur devis</span>:<>{p.prixNormal&&<div style={{fontSize:11,color:C.textLight,textDecoration:"line-through",marginBottom:1}}>{p.prixNormal} €</div>}<div style={{fontSize:15,fontWeight:700,color:p.prixNormal?"#e07070":active?C.accentDark:C.textMid}}>{p.prix} €</div>{p.prixNormal&&<div style={{fontSize:10,color:"#e07070",fontWeight:700,letterSpacing:.5}}>-50%</div>}</>}
                             </div>
                           </div>
                         );
@@ -1067,57 +729,27 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
           </div>
         </div>
       )}
-
-      {/* ── DATE & HORAIRES style Planity ── */}
       {selPresta&&(
         <div ref={r3} className="fu" style={{marginTop:36}}>
           <Lbl>Date &amp; horaire</Lbl>
-          <PlanityDatePicker
-            selPresta={selPresta}
-            allRdvs={allRdvs}
-            allSupaBlocked={allSupaBlocked}
-            selectedDate={date}
-            selectedSlot={slot}
-            onSelect={(d,s)=>{
-              setDate(d);
-              if(s) { setSlot(s); sc(r5); }
-              else setSlot("");
-            }}
-          />
+          <PlanityDatePicker selPresta={selPresta} allRdvs={allRdvs} allSupaBlocked={allSupaBlocked} selectedDate={date} selectedSlot={slot} onSelect={(d,s)=>{setDate(d);if(s){setSlot(s);sc(r5);}else setSlot("");}}/>
         </div>
       )}
-
-      {/* ── RÉCAP ── */}
       {slot&&(
         <div ref={r5} className="fu" style={{marginTop:36}}>
           <Lbl>Récapitulatif</Lbl>
           <div style={{background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"20px",marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,.03)"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",paddingBottom:14,borderBottom:`1px solid ${C.borderLight}`,marginBottom:14}}>
-              <div>
-                <div style={{fontSize:16,fontWeight:600,color:C.text,marginBottom:4}}>{selPresta.nom}</div>
-                <div style={{fontSize:13,color:C.textMid}}>{svc?.label} · {selPresta.duree} min</div>
-              </div>
+              <div><div style={{fontSize:16,fontWeight:600,color:C.text,marginBottom:4}}>{selPresta.nom}</div><div style={{fontSize:13,color:C.textMid}}>{svc?.label} · {selPresta.duree} min</div></div>
               <div style={{fontSize:18,fontWeight:700,color:C.accentDark}}>{selPresta.prix>0?`${selPresta.prix} €`:"Offert"}</div>
             </div>
-            {[["Date",fmtLong(date)],["Heure",slot]].map(([k,v])=>(
-              <div key={k} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"5px 0"}}>
-                <span style={{color:C.textLight}}>{k}</span><span style={{color:C.textMid,fontWeight:500}}>{v}</span>
-              </div>
-            ))}
-
+            {[["Date",fmtLong(date)],["Heure",slot]].map(([k,v])=>(<div key={k} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"5px 0"}}><span style={{color:C.textLight}}>{k}</span><span style={{color:C.textMid,fontWeight:500}}>{v}</span></div>))}
           </div>
-
           <div style={{background:C.accentLight,border:`1px solid ${C.accent}`,borderRadius:12,padding:"12px 16px",marginBottom:14,display:"flex",alignItems:"center",gap:12}}>
             <span style={{fontSize:20}}>💶</span>
-            <div style={{flex:1}}>
-              <div style={{fontSize:13,fontWeight:600,color:C.accentDark,marginBottom:2}}>Paiement uniquement en espèces</div>
-              <div style={{fontSize:11,color:C.textMid,lineHeight:1.5}}>Merci de prévoir l'appoint le jour du rendez-vous.</div>
-            </div>
+            <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:C.accentDark,marginBottom:2}}>Paiement uniquement en espèces</div><div style={{fontSize:11,color:C.textMid,lineHeight:1.5}}>Merci de prévoir l'appoint le jour du rendez-vous.</div></div>
           </div>
-
-          <PBtn onClick={()=>session?handleConfirm(session):setShowAuth(true)} disabled={confirming}>
-            {confirming?"Confirmation en cours…":session?"Confirmer le rendez-vous":"Continuer pour confirmer"}
-          </PBtn>
+          <PBtn onClick={()=>session?handleConfirm(session):setShowAuth(true)} disabled={confirming}>{confirming?"Confirmation en cours…":session?"Confirmer le rendez-vous":"Continuer pour confirmer"}</PBtn>
           {confirmError&&<div style={{textAlign:"center",fontSize:13,color:"#f08080",marginTop:10,padding:"10px 14px",background:"#2a1010",border:"1px solid #5a2020",borderRadius:8}}>{confirmError}</div>}
           {!session&&<div style={{textAlign:"center",fontSize:12,color:C.textLight,marginTop:10}}>Connexion requise pour finaliser</div>}
         </div>
@@ -1126,57 +758,25 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
   );
 }
 
-// ── MES RDV ───────────────────────────────────────────────────────────────────
 function MesRdvsView({rdvs,loading,session,onRdvCancelled}) {
   const up=rdvs.filter(r=>r.date>=todayStr()&&r.statut!=="annulé").sort((a,b)=>a.date.localeCompare(b.date));
   const past=rdvs.filter(r=>r.date<todayStr()||r.statut==="annulé").sort((a,b)=>b.date.localeCompare(a.date));
   const svcColor=(catId)=>SERVICES.find(s=>s.id===catId)?.color||C.accent;
-  const [cancelling, setCancelling] = useState(false);
-  const [cancelError, setCancelError] = useState("");
-
-  const canCancel=(r)=>{
-    const rdvDate=new Date(`${r.date}T${r.slot}:00`);
-    const now=new Date();
-    return rdvDate.getTime()-now.getTime()>24*60*60*1000;
-  };
-
+  const [cancelling,setCancelling]=useState(false);const [cancelError,setCancelError]=useState("");
+  const canCancel=(r)=>{const rdvDate=new Date(`${r.date}T${r.slot}:00`);const now=new Date();return rdvDate.getTime()-now.getTime()>24*60*60*1000;};
   const handleCancel=async(r)=>{
-    if(!confirm("Annuler ce rendez-vous ?")) return;
-    if(cancelling) return;
-    setCancelling(true);
-    setCancelError("");
-    try {
-      // FIX CRITIQUE : passer le token de la session cliente pour que la RLS reconnaisse l'utilisateur
-      const token = session?.token;
-      if(!token){
-        setCancelError("Session expirée. Veuillez vous reconnecter.");
-        setCancelling(false);
-        return;
-      }
-      const patchRes = await api.patch("rdvs", `id=eq.${r.id}`, {statut:"annulé"}, token);
-      // Vérifier que l'update a vraiment été appliqué
-      const updated = Array.isArray(patchRes) ? patchRes[0] : patchRes;
-      if(!updated || updated.error || (updated.statut && updated.statut !== "annulé")){
-        setCancelError("Impossible d'annuler ce rendez-vous. Contactez-nous.");
-        setCancelling(false);
-        return;
-      }
-      // FIX: await sur les deux pour qu'ils partent avant reload
-      await Promise.all([
-        sendCancelEmail(r),
-        sendPush(`❌ Annulation − ${r.client_prenom} ${r.client_nom}`, `${r.prestation} · ${fmtLong(r.date)} à ${r.slot}`),
-      ]);
-      // Mise à jour locale via callback (évite le reload brutal)
-      if(onRdvCancelled) onRdvCancelled(r.id);
-    } catch(e){
-      console.log("Erreur annulation:", e);
-      setCancelError("Erreur réseau. Réessayez.");
-    }
+    if(!confirm("Annuler ce rendez-vous ?"))return;if(cancelling)return;setCancelling(true);setCancelError("");
+    try{
+      const token=session?.token;if(!token){setCancelError("Session expirée. Veuillez vous reconnecter.");setCancelling(false);return;}
+      const patchRes=await api.patch("rdvs",`id=eq.${r.id}`,{statut:"annulé"},token);const updated=Array.isArray(patchRes)?patchRes[0]:patchRes;
+      if(!updated||updated.error||(updated.statut&&updated.statut!=="annulé")){setCancelError("Impossible d'annuler ce rendez-vous. Contactez-nous.");setCancelling(false);return;}
+      await Promise.all([sendCancelEmail(r),sendPush(`❌ Annulation − ${r.client_prenom} ${r.client_nom}`,`${r.prestation} · ${fmtLong(r.date)} à ${r.slot}`)]);
+      if(onRdvCancelled)onRdvCancelled(r.id);
+    }catch(e){console.log("Erreur annulation:",e);setCancelError("Erreur réseau. Réessayez.");}
     setCancelling(false);
   };
-
   const Card=({r})=>{
-    const isUpcoming = r.statut!=="annulé" && r.date>=todayStr();
+    const isUpcoming=r.statut!=="annulé"&&r.date>=todayStr();
     return (
       <div style={{padding:"16px 0",borderBottom:`1px solid ${C.borderLight}`,display:"flex",gap:14,alignItems:"stretch",opacity:r.statut==="annulé"?0.5:1}}>
         <div style={{width:3,alignSelf:"stretch",borderRadius:2,background:svcColor(r.cat_id),flexShrink:0}}/>
@@ -1188,19 +788,15 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled}) {
             {r.statut==="annulé"&&<div style={{fontSize:12,color:"#c05050",marginTop:6}}>Annulé</div>}
           </div>
           {isUpcoming&&<AdresseBlock/>}
-          {isUpcoming&&canCancel(r)&&(
-            <button onClick={()=>handleCancel(r)} disabled={cancelling} style={{marginTop:14,width:"100%",fontSize:12,color:cancelling?C.textLight:"#c05050",background:"none",border:`1px solid ${cancelling?C.border:"#3a1a1a"}`,borderRadius:8,padding:"9px",cursor:cancelling?"default":"pointer"}}>
-              {cancelling?"Annulation en cours…":"Annuler le rendez-vous"}
-            </button>
-          )}
+          {isUpcoming&&canCancel(r)&&(<button onClick={()=>handleCancel(r)} disabled={cancelling} style={{marginTop:14,width:"100%",fontSize:12,color:cancelling?C.textLight:"#c05050",background:"none",border:`1px solid ${cancelling?C.border:"#3a1a1a"}`,borderRadius:8,padding:"9px",cursor:cancelling?"default":"pointer"}}>{cancelling?"Annulation en cours…":"Annuler le rendez-vous"}</button>)}
         </div>
       </div>
     );
   };
-  if(loading) return <div style={{textAlign:"center",padding:48,color:C.textLight,fontSize:14}}>Chargement…</div>;
+  if(loading)return <div style={{textAlign:"center",padding:48,color:C.textLight,fontSize:14}}>Chargement…</div>;
   return (
     <div>
-      {cancelError && <div style={{padding:"12px 14px",background:"#2a1010",border:"1px solid #5a2020",borderRadius:8,marginBottom:16,fontSize:13,color:"#f08080"}}>{cancelError}</div>}
+      {cancelError&&<div style={{padding:"12px 14px",background:"#2a1010",border:"1px solid #5a2020",borderRadius:8,marginBottom:16,fontSize:13,color:"#f08080"}}>{cancelError}</div>}
       {up.length>0&&<div style={{marginBottom:32}}><Lbl>À venir</Lbl>{up.map(r=><Card key={r.id} r={r}/>)}</div>}
       {past.length>0&&<div><Lbl>Historique</Lbl>{past.map(r=><Card key={r.id} r={r}/>)}</div>}
       {up.length===0&&past.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous pour l'instant.</div>}
@@ -1208,962 +804,268 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled}) {
   );
 }
 
-// ── ADMIN ─────────────────────────────────────────────────────────────────────
 function PlanningAdmin() {
-  const ALL_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  // ✏️ MODIFIÉ : créneaux semaine étendus de 17h à 20h
-  const SEMAINE = ["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const WEEKEND = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const [selDate, setSelDate] = useState(todayStr());
-  const [supaBlocked, setSupaBlocked] = useState([]);
-  const [saving, setSaving] = useState(false);
-
-  const dow = selDate ? parseD(selDate).getDay() : 1;
-  const isWE = dow===0||dow===6;
-  const autoAllowed = isWE ? WEEKEND : SEMAINE;
-
-  const loadBlocked = async (date) => {
-    const d = await api.get("blocked_slots", `date=eq.${date}&select=slot`);
-    if(Array.isArray(d)) setSupaBlocked(d.map(r=>r.slot));
-  };
-
-  useEffect(()=>{ loadBlocked(selDate); },[selDate]);
-
-  const isAutoBlocked = (slot) => !autoAllowed.includes(slot);
-  const isManualBlocked = (slot) => supaBlocked.includes(slot);
-
-  const toggleSlot = async (slot) => {
-    if(isAutoBlocked(slot)) return;
-    setSaving(true);
-    if(isManualBlocked(slot)) {
-      await fetch(`${SUPA_URL}/rest/v1/blocked_slots?date=eq.${selDate}&slot=eq.${encodeURIComponent(slot)}`,{method:"DELETE",headers:api.authHeaders()});
-      setSupaBlocked(p=>p.filter(s=>s!==slot));
-    } else {
-      await api.post("blocked_slots",{date:selDate,slot});
-      setSupaBlocked(p=>[...p,slot]);
-    }
-    setSaving(false);
-  };
-
-  const blockFullDay = async () => {
-    setSaving(true);
-    const toBlock = autoAllowed.filter(s=>!supaBlocked.includes(s));
-    for(const slot of toBlock) await api.post("blocked_slots",{date:selDate,slot});
-    setSupaBlocked(autoAllowed);
-    setSaving(false);
-  };
-
-  const unblockFullDay = async () => {
-    setSaving(true);
-    await fetch(`${SUPA_URL}/rest/v1/blocked_slots?date=eq.${selDate}`,{method:"DELETE",headers:api.authHeaders()});
-    setSupaBlocked([]);
-    setSaving(false);
-  };
-
+  const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const SEMAINE=["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const WEEKEND=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const [selDate,setSelDate]=useState(todayStr());const [supaBlocked,setSupaBlocked]=useState([]);const [saving,setSaving]=useState(false);
+  const dow=selDate?parseD(selDate).getDay():1;const isWE=dow===0||dow===6;const autoAllowed=isWE?WEEKEND:SEMAINE;
+  const loadBlocked=async(date)=>{const d=await api.get("blocked_slots",`date=eq.${date}&select=slot`);if(Array.isArray(d))setSupaBlocked(d.map(r=>r.slot));};
+  useEffect(()=>{loadBlocked(selDate);},[selDate]);
+  const isAutoBlocked=(slot)=>!autoAllowed.includes(slot);const isManualBlocked=(slot)=>supaBlocked.includes(slot);
+  const toggleSlot=async(slot)=>{if(isAutoBlocked(slot))return;setSaving(true);if(isManualBlocked(slot)){await fetch(`${SUPA_URL}/rest/v1/blocked_slots?date=eq.${selDate}&slot=eq.${encodeURIComponent(slot)}`,{method:"DELETE",headers:api.authHeaders()});setSupaBlocked(p=>p.filter(s=>s!==slot));}else{await api.post("blocked_slots",{date:selDate,slot});setSupaBlocked(p=>[...p,slot]);}setSaving(false);};
+  const blockFullDay=async()=>{setSaving(true);const toBlock=autoAllowed.filter(s=>!supaBlocked.includes(s));for(const slot of toBlock)await api.post("blocked_slots",{date:selDate,slot});setSupaBlocked(autoAllowed);setSaving(false);};
+  const unblockFullDay=async()=>{setSaving(true);await fetch(`${SUPA_URL}/rest/v1/blocked_slots?date=eq.${selDate}`,{method:"DELETE",headers:api.authHeaders()});setSupaBlocked([]);setSaving(false);};
   return (
     <div>
-      <div style={{marginBottom:20,padding:"12px 16px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,fontSize:12,color:C.textMid,lineHeight:1.8}}>
-        <span style={{color:C.accentDark,fontWeight:600}}>■</span> Ouvert &nbsp;·&nbsp;
-        <span style={{color:"#f07070",fontWeight:600}}>■</span> Bloqué par toi &nbsp;·&nbsp;
-        <span style={{color:C.textLight,fontWeight:600}}>■</span> Hors horaires
-      </div>
-      <div style={{background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"20px 18px",marginBottom:20}}>
-        <Calendar selected={selDate} onSelect={setSelDate} bookedDates={[]}/>
-      </div>
+      <div style={{marginBottom:20,padding:"12px 16px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,fontSize:12,color:C.textMid,lineHeight:1.8}}><span style={{color:C.accentDark,fontWeight:600}}>■</span> Ouvert &nbsp;·&nbsp;<span style={{color:"#f07070",fontWeight:600}}>■</span> Bloqué par toi &nbsp;·&nbsp;<span style={{color:C.textLight,fontWeight:600}}>■</span> Hors horaires</div>
+      <div style={{background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"20px 18px",marginBottom:20}}><Calendar selected={selDate} onSelect={setSelDate} bookedDates={[]}/></div>
       <div style={{fontSize:13,fontWeight:600,color:C.textMid,marginBottom:12}}>{fmtLong(selDate)}</div>
       <div style={{display:"flex",gap:8,marginBottom:16}}>
         <button onClick={blockFullDay} disabled={saving} style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.textMid,fontSize:12,cursor:"pointer"}}>Bloquer toute la journée</button>
         <button onClick={unblockFullDay} disabled={saving} style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.textMid,fontSize:12,cursor:"pointer"}}>Tout débloquer</button>
       </div>
-      {saving && <div style={{textAlign:"center",fontSize:12,color:C.textLight,marginBottom:12}}>Sauvegarde…</div>}
+      {saving&&<div style={{textAlign:"center",fontSize:12,color:C.textLight,marginBottom:12}}>Sauvegarde…</div>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-        {ALL_SLOTS.map(s=>{
-          const autoB=isAutoBlocked(s), manualB=isManualBlocked(s);
-          return (
-            <div key={s} onClick={()=>toggleSlot(s)} style={{
-              padding:"11px 4px", textAlign:"center", borderRadius:10,
-              border:`1.5px solid ${manualB?"#c05050":autoB?C.border:C.accent}`,
-              background: manualB?"#2a1010":autoB?C.surfaceAlt:C.accentLight,
-              color: manualB?"#f07070":autoB?C.textLight:C.accentDark,
-              fontSize:13, cursor:autoB?"default":"pointer", transition:"all .15s",
-              fontWeight:(!autoB&&!manualB)?600:400,
-            }}>
-              {s}
-            </div>
-          );
-        })}
+        {ALL_SLOTS.map(s=>{const autoB=isAutoBlocked(s),manualB=isManualBlocked(s);return(<div key={s} onClick={()=>toggleSlot(s)} style={{padding:"11px 4px",textAlign:"center",borderRadius:10,border:`1.5px solid ${manualB?"#c05050":autoB?C.border:C.accent}`,background:manualB?"#2a1010":autoB?C.surfaceAlt:C.accentLight,color:manualB?"#f07070":autoB?C.textLight:C.accentDark,fontSize:13,cursor:autoB?"default":"pointer",transition:"all .15s",fontWeight:(!autoB&&!manualB)?600:400}}>{s}</div>);})}
       </div>
     </div>
   );
 }
-// ── ADMIN : CRÉATION D'UN RDV ────────────────────────────────────────────────
-function AdminCreateRdvView({allRdvs, profs, onCreated}) {
-  const ALL_SLOTS = ["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
 
-  const [mode, setMode] = useState("existing"); // "existing" ou "new"
-  // Cliente existante
-  const [selectedClientId, setSelectedClientId] = useState("");
-  // Cliente nouvelle (saisie libre)
-  const [newPrenom, setNewPrenom] = useState("");
-  const [newNom, setNewNom] = useState("");
-  const [newTel, setNewTel] = useState("");
-  const [newEmail, setNewEmail] = useState("");
-  // Prestation
-  const [svcId, setSvcId] = useState("");
-  const [subId, setSubId] = useState("");
-  const [prestaId, setPrestaId] = useState("");
-  // Date / créneau
-  const [date, setDate] = useState(todayStr());
-  const [slot, setSlot] = useState("");
-  // États
-  const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState(null); // {type:"ok"|"err", text:""}
-
-  const svc = svcId ? SERVICES.find(s=>s.id===svcId) : null;
-  const sub = svc && subId ? svc.subcats.find(s=>s.id===subId) : null;
-  const presta = sub && prestaId ? sub.prestations.find(p=>p.id===prestaId) : null;
-
-  // Calcule les créneaux pris ce jour-là (par d'autres RDV)
-  const takenSlots = (() => {
-    const blocked = new Set();
-    allRdvs.filter(r=>r.date===date && r.statut!=="annulé").forEach(r=>{
-      const idx = ALL_SLOTS.indexOf(r.slot);
-      if(idx===-1) return;
-      let mins = 0;
-      for(let i=idx; i<ALL_SLOTS.length && mins<(r.duree||30); i++){
-        blocked.add(ALL_SLOTS[i]);
-        mins += 30;
-      }
-    });
-    return blocked;
-  })();
-
-  // Vérifie si le slot choisi laisse assez de place pour la durée de la presta
-  const slotFitsDuration = (s) => {
-    if(!presta) return true;
-    const idx = ALL_SLOTS.indexOf(s);
-    if(idx===-1) return false;
-    const slotsNeeded = Math.ceil((presta.duree||30)/30);
-    for(let i=0; i<slotsNeeded; i++){
-      const checkSlot = ALL_SLOTS[idx+i];
-      if(!checkSlot) return false;
-      if(takenSlots.has(checkSlot)) return false;
-    }
-    return true;
-  };
-
-  const handleCreate = async () => {
-    if(saving) return; // anti double-clic
-    setMsg(null);
-    if(!presta){ setMsg({type:"err", text:"Choisis une prestation."}); return; }
-    if(!date || !slot){ setMsg({type:"err", text:"Choisis une date et un créneau."}); return; }
-    if(!slotFitsDuration(slot)){ setMsg({type:"err", text:"Ce créneau chevauche un autre RDV."}); return; }
-
-    let client_prenom, client_nom, client_tel, client_email, user_id;
-    if(mode==="existing"){
-      if(!selectedClientId){ setMsg({type:"err", text:"Choisis une cliente."}); return; }
-      const c = profs.find(p=>p.id===selectedClientId);
-      if(!c){ setMsg({type:"err", text:"Cliente introuvable."}); return; }
-      client_prenom = c.prenom; client_nom = c.nom; client_tel = c.tel;
-      client_email = c.email || ""; user_id = c.id;
-    } else {
-      if(!newPrenom||!newNom||!newTel){ setMsg({type:"err", text:"Prénom, nom et téléphone requis."}); return; }
-      client_prenom = newPrenom; client_nom = newNom; client_tel = newTel;
-      client_email = newEmail || ""; user_id = null;
-    }
-
+function AdminCreateRdvView({allRdvs,profs,onCreated}) {
+  const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const [mode,setMode]=useState("existing");const [selectedClientId,setSelectedClientId]=useState("");
+  const [newPrenom,setNewPrenom]=useState("");const [newNom,setNewNom]=useState("");const [newTel,setNewTel]=useState("");const [newEmail,setNewEmail]=useState("");
+  const [svcId,setSvcId]=useState("");const [subId,setSubId]=useState("");const [prestaId,setPrestaId]=useState("");
+  const [date,setDate]=useState(todayStr());const [slot,setSlot]=useState("");const [saving,setSaving]=useState(false);const [msg,setMsg]=useState(null);
+  const svc=svcId?SERVICES.find(s=>s.id===svcId):null;const sub=svc&&subId?svc.subcats.find(s=>s.id===subId):null;const presta=sub&&prestaId?sub.prestations.find(p=>p.id===prestaId):null;
+  const takenSlots=(()=>{const blocked=new Set();allRdvs.filter(r=>r.date===date&&r.statut!=="annulé").forEach(r=>{const idx=ALL_SLOTS.indexOf(r.slot);if(idx===-1)return;let mins=0;for(let i=idx;i<ALL_SLOTS.length&&mins<(r.duree||30);i++){blocked.add(ALL_SLOTS[i]);mins+=30;}});return blocked;})();
+  const slotFitsDuration=(s)=>{if(!presta)return true;const idx=ALL_SLOTS.indexOf(s);if(idx===-1)return false;const slotsNeeded=Math.ceil((presta.duree||30)/30);for(let i=0;i<slotsNeeded;i++){const checkSlot=ALL_SLOTS[idx+i];if(!checkSlot)return false;if(takenSlots.has(checkSlot))return false;}return true;};
+  const handleCreate=async()=>{
+    if(saving)return;setMsg(null);
+    if(!presta){setMsg({type:"err",text:"Choisis une prestation."});return;}if(!date||!slot){setMsg({type:"err",text:"Choisis une date et un créneau."});return;}if(!slotFitsDuration(slot)){setMsg({type:"err",text:"Ce créneau chevauche un autre RDV."});return;}
+    let client_prenom,client_nom,client_tel,client_email,user_id;
+    if(mode==="existing"){if(!selectedClientId){setMsg({type:"err",text:"Choisis une cliente."});return;}const c=profs.find(p=>p.id===selectedClientId);if(!c){setMsg({type:"err",text:"Cliente introuvable."});return;}client_prenom=c.prenom;client_nom=c.nom;client_tel=c.tel;client_email=c.email||"";user_id=c.id;}
+    else{if(!newPrenom||!newNom||!newTel){setMsg({type:"err",text:"Prénom, nom et téléphone requis."});return;}client_prenom=newPrenom;client_nom=newNom;client_tel=newTel;client_email=newEmail||"";user_id=null;}
     setSaving(true);
-    try {
-      // FIX CRITIQUE : recharger les RDV LIVE depuis Supabase pour vérifier la disponibilité
-      const liveRdvs = await api.get("rdvs", `date=eq.${date}&statut=neq.annulé&select=slot,duree`);
-      if(Array.isArray(liveRdvs)){
-        const wantedIdx = ALL_SLOTS.indexOf(slot);
-        const wantedSlotsNeeded = Math.ceil((presta.duree||30)/30);
-        for(const r of liveRdvs){
-          const rIdx = ALL_SLOTS.indexOf(r.slot);
-          if(rIdx === -1) continue;
-          const rEnd = rIdx + Math.ceil((r.duree||30)/30);
-          const wantedEnd = wantedIdx + wantedSlotsNeeded;
-          if(wantedIdx < rEnd && wantedEnd > rIdx){
-            setMsg({type:"err", text:"Ce créneau vient d'être pris par quelqu'un d'autre. Rafraîchis et choisis-en un autre."});
-            setSaving(false);
-            return;
-          }
-        }
-      }
-
-      const rdv = {
-        user_id, cat_id: svcId, service: svc.label,
-        prestation: presta.nom, duree: presta.duree,
-        prix: presta.prix || 0, acompte: presta.acompte || 0,
-        date, slot,
-        client_prenom, client_nom, client_tel, client_email,
-        statut: "confirmé",
-      };
-      const res = await api.post("rdvs", rdv);
-      // Détection erreur Supabase (genre doublon UNIQUE)
-      if(res && res.code){
-        if(res.code === "23505"){
-          setMsg({type:"err", text:"Cette cliente a déjà un rendez-vous à cet horaire. Choisis un autre créneau."});
-        } else {
-          setMsg({type:"err", text:"Erreur insertion : "+(res.message||"inconnue")});
-        }
-        setSaving(false);
-        return;
-      }
-      const saved = Array.isArray(res) ? res[0] : res;
-      if(!saved || saved.error){
-        setMsg({type:"err", text:"Erreur insertion : "+(saved?.message||"inconnue")});
-        setSaving(false);
-        return;
-      }
-      // FIX: await sur les deux pour éviter qu'ils soient avortés
-      const tasks = [];
-      if(client_email) tasks.push(sendEmails(rdv, client_email));
-      tasks.push(sendPush(`${client_prenom} ${client_nom}`, `${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`));
-      await Promise.all(tasks);
-      // Fidélité : si palier atteint, notif promo en plus
-      const promoFidAdmin = checkFidelitePromo(allRdvs, rdv);
-      if(promoFidAdmin) await sendPush(`🎁 FIDÉLITÉ — ${client_prenom} ${client_nom}`, promoFidAdmin.msg);
-      setMsg({type:"ok", text:`RDV créé pour ${client_prenom} ${client_nom} le ${fmtLong(date)} à ${slot}${client_email?" — email envoyé":""}.`});
-      if(onCreated) onCreated(saved);
-      // Reset partiel
-      setSlot(""); setPrestaId(""); setSubId(""); setSvcId("");
-      setSelectedClientId(""); setNewPrenom(""); setNewNom(""); setNewTel(""); setNewEmail("");
-    } catch(e){
-      setMsg({type:"err", text:"Erreur réseau : "+e.message});
-    }
+    try{
+      const liveRdvs=await api.get("rdvs",`date=eq.${date}&statut=neq.annulé&select=slot,duree`);
+      if(Array.isArray(liveRdvs)){const wantedIdx=ALL_SLOTS.indexOf(slot);const wantedSlotsNeeded=Math.ceil((presta.duree||30)/30);for(const r of liveRdvs){const rIdx=ALL_SLOTS.indexOf(r.slot);if(rIdx===-1)continue;const rEnd=rIdx+Math.ceil((r.duree||30)/30);const wantedEnd=wantedIdx+wantedSlotsNeeded;if(wantedIdx<rEnd&&wantedEnd>rIdx){setMsg({type:"err",text:"Ce créneau vient d'être pris. Rafraîchis et choisis-en un autre."});setSaving(false);return;}}}
+      const rdv={user_id,cat_id:svcId,service:svc.label,prestation:presta.nom,duree:presta.duree,prix:presta.prix||0,acompte:presta.acompte||0,date,slot,client_prenom,client_nom,client_tel,client_email,statut:"confirmé"};
+      const res=await api.post("rdvs",rdv);
+      if(res&&res.code){setMsg({type:"err",text:res.code==="23505"?"Cette cliente a déjà un RDV à cet horaire.":"Erreur : "+(res.message||"inconnue")});setSaving(false);return;}
+      const saved=Array.isArray(res)?res[0]:res;if(!saved||saved.error){setMsg({type:"err",text:"Erreur insertion : "+(saved?.message||"inconnue")});setSaving(false);return;}
+      const tasks=[];if(client_email)tasks.push(sendEmails(rdv,client_email));tasks.push(sendPush(`${client_prenom} ${client_nom}`,`${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`));await Promise.all(tasks);
+      const promoFidAdmin=checkFidelitePromo(allRdvs,rdv);if(promoFidAdmin)await sendPush(`🎁 FIDÉLITÉ — ${client_prenom} ${client_nom}`,promoFidAdmin.msg);
+      setMsg({type:"ok",text:`RDV créé pour ${client_prenom} ${client_nom} le ${fmtLong(date)} à ${slot}${client_email?" — email envoyé":""}.`});if(onCreated)onCreated(saved);
+      setSlot("");setPrestaId("");setSubId("");setSvcId("");setSelectedClientId("");setNewPrenom("");setNewNom("");setNewTel("");setNewEmail("");
+    }catch(e){setMsg({type:"err",text:"Erreur réseau : "+e.message});}
     setSaving(false);
   };
-
   return (
     <div>
       <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:18}}>Créer un rendez-vous</div>
-
-      {/* Mode cliente */}
       <Lbl>Cliente</Lbl>
-      <div style={{display:"flex",background:C.surfaceAlt,borderRadius:10,padding:4,marginBottom:16}}>
-        {[["existing","Cliente existante"],["new","Nouvelle cliente"]].map(([id,label])=>(
-          <button key={id} onClick={()=>setMode(id)} style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:mode===id?C.surface:"transparent",color:mode===id?C.text:C.textMid,fontSize:13,fontWeight:mode===id?600:400,cursor:"pointer"}}>{label}</button>
-        ))}
-      </div>
-
-      {mode==="existing" ? (
-        <div style={{marginBottom:18}}>
-          <select value={selectedClientId} onChange={e=>setSelectedClientId(e.target.value)} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14}}>
-            <option value="">— Choisir une cliente —</option>
-            {[...profs].sort((a,b)=>(a.prenom||"").localeCompare(b.prenom||"")).map(p=>(
-              <option key={p.id} value={p.id}>{p.prenom} {p.nom} — {p.tel}</option>
-            ))}
-          </select>
-        </div>
-      ) : (
-        <div style={{marginBottom:18}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-            <Inp value={newPrenom} onChange={e=>setNewPrenom(e.target.value)} placeholder="Prénom"/>
-            <Inp value={newNom} onChange={e=>setNewNom(e.target.value)} placeholder="Nom"/>
-          </div>
-          <Inp value={newTel} onChange={e=>setNewTel(e.target.value)} placeholder="Téléphone" type="tel" style={{marginBottom:10}}/>
-          <Inp value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder="Email (optionnel, pour confirmation)" type="email"/>
-        </div>
-      )}
-
-      {/* Prestation */}
+      <div style={{display:"flex",background:C.surfaceAlt,borderRadius:10,padding:4,marginBottom:16}}>{[["existing","Cliente existante"],["new","Nouvelle cliente"]].map(([id,label])=>(<button key={id} onClick={()=>setMode(id)} style={{flex:1,padding:"9px",borderRadius:8,border:"none",background:mode===id?C.surface:"transparent",color:mode===id?C.text:C.textMid,fontSize:13,fontWeight:mode===id?600:400,cursor:"pointer"}}>{label}</button>))}</div>
+      {mode==="existing"?(<div style={{marginBottom:18}}><select value={selectedClientId} onChange={e=>setSelectedClientId(e.target.value)} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14}}><option value="">— Choisir une cliente —</option>{[...profs].sort((a,b)=>(a.prenom||"").localeCompare(b.prenom||"")).map(p=>(<option key={p.id} value={p.id}>{p.prenom} {p.nom} — {p.tel}</option>))}</select></div>):(<div style={{marginBottom:18}}><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}><Inp value={newPrenom} onChange={e=>setNewPrenom(e.target.value)} placeholder="Prénom"/><Inp value={newNom} onChange={e=>setNewNom(e.target.value)} placeholder="Nom"/></div><Inp value={newTel} onChange={e=>setNewTel(e.target.value)} placeholder="Téléphone" type="tel" style={{marginBottom:10}}/><Inp value={newEmail} onChange={e=>setNewEmail(e.target.value)} placeholder="Email (optionnel)" type="email"/></div>)}
       <Lbl>Service</Lbl>
-      <select value={svcId} onChange={e=>{setSvcId(e.target.value);setSubId("");setPrestaId("");}} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14,marginBottom:12}}>
-        <option value="">— Choisir un service —</option>
-        {SERVICES.map(s=>(<option key={s.id} value={s.id}>{s.label}</option>))}
-      </select>
-
-      {svc && (
-        <select value={subId} onChange={e=>{setSubId(e.target.value);setPrestaId("");}} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14,marginBottom:12}}>
-          <option value="">— Choisir une sous-catégorie —</option>
-          {svc.subcats.map(s=>(<option key={s.id} value={s.id}>{s.label}</option>))}
-        </select>
-      )}
-
-      {sub && (
-        <select value={prestaId} onChange={e=>setPrestaId(e.target.value)} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14,marginBottom:18}}>
-          <option value="">— Choisir une prestation —</option>
-          {sub.prestations.map(p=>(<option key={p.id} value={p.id}>{p.nom} — {p.duree}min — {p.prix?p.prix+"€":"Sur devis"}</option>))}
-        </select>
-      )}
-
-      {/* Date */}
+      <select value={svcId} onChange={e=>{setSvcId(e.target.value);setSubId("");setPrestaId("");}} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14,marginBottom:12}}><option value="">— Choisir un service —</option>{SERVICES.map(s=>(<option key={s.id} value={s.id}>{s.label}</option>))}</select>
+      {svc&&(<select value={subId} onChange={e=>{setSubId(e.target.value);setPrestaId("");}} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14,marginBottom:12}}><option value="">— Choisir une sous-catégorie —</option>{svc.subcats.map(s=>(<option key={s.id} value={s.id}>{s.label}</option>))}</select>)}
+      {sub&&(<select value={prestaId} onChange={e=>setPrestaId(e.target.value)} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14,marginBottom:18}}><option value="">— Choisir une prestation —</option>{sub.prestations.map(p=>(<option key={p.id} value={p.id}>{p.nom} — {p.duree}min — {p.prix?p.prix+"€":"Sur devis"}</option>))}</select>)}
       <Lbl>Date</Lbl>
       <Inp type="date" value={date} min={todayStr()} onChange={e=>{setDate(e.target.value);setSlot("");}} style={{marginBottom:16}}/>
-      
-      {/* Créneaux */}
-      {presta && (
-        <>
-          <Lbl>Créneau (durée {presta.duree} min)</Lbl>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:18}}>
-            {ALL_SLOTS.map(s=>{
-              const isTaken = takenSlots.has(s);
-              const fits = !isTaken && slotFitsDuration(s);
-              const active = slot===s;
-              const disabled = isTaken || !fits;
-              return (
-                <div key={s} onClick={()=>!disabled && setSlot(s)} style={{
-                  padding:"11px 4px", textAlign:"center", borderRadius:10,
-                  border:`1.5px solid ${active?C.accent:disabled?C.border:C.border}`,
-                  background: active?C.accent:disabled?"#2a1010":C.surface,
-                  color: active?"#fff":disabled?"#7a4040":C.textMid,
-                  fontSize:13, fontWeight:active?700:400,
-                  cursor:disabled?"default":"pointer", transition:"all .15s",
-                  textDecoration:isTaken?"line-through":"none",
-                }}>{s}</div>
-              );
-            })}
-          </div>
-        </>
-      )}
-
-      {/* Message */}
-      {msg && (
-        <div style={{padding:"12px 14px",borderRadius:10,marginBottom:14,fontSize:13,
-          background: msg.type==="ok"?"#0f2a18":"#2a1010",
-          color: msg.type==="ok"?"#8dd0a0":"#f08080",
-          border: `1px solid ${msg.type==="ok"?"#1f4028":"#5a2020"}`,
-        }}>{msg.text}</div>
-      )}
-
-      {/* Bouton créer */}
-      <PBtn onClick={handleCreate} disabled={saving}>
-        {saving ? "Création…" : "Créer le rendez-vous"}
-      </PBtn>
+      {presta&&(<><Lbl>Créneau (durée {presta.duree} min)</Lbl><div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:18}}>{ALL_SLOTS.map(s=>{const isTaken=takenSlots.has(s);const fits=!isTaken&&slotFitsDuration(s);const active=slot===s;const disabled=isTaken||!fits;return(<div key={s} onClick={()=>!disabled&&setSlot(s)} style={{padding:"11px 4px",textAlign:"center",borderRadius:10,border:`1.5px solid ${active?C.accent:C.border}`,background:active?C.accent:disabled?"#2a1010":C.surface,color:active?"#fff":disabled?"#7a4040":C.textMid,fontSize:13,fontWeight:active?700:400,cursor:disabled?"default":"pointer",transition:"all .15s",textDecoration:isTaken?"line-through":"none"}}>{s}</div>);})}
+      </div></>)}
+      {msg&&(<div style={{padding:"12px 14px",borderRadius:10,marginBottom:14,fontSize:13,background:msg.type==="ok"?"#0f2a18":"#2a1010",color:msg.type==="ok"?"#8dd0a0":"#f08080",border:`1px solid ${msg.type==="ok"?"#1f4028":"#5a2020"}`}}>{msg.text}</div>)}
+      <PBtn onClick={handleCreate} disabled={saving}>{saving?"Création…":"Créer le rendez-vous"}</PBtn>
     </div>
   );
 }
+
 function AdminView({onExit}) {
-  const [isUnlocked,setIsUnlocked]=useState(false);
-  const [adminEmail, setAdminEmail] = useState("");
-  const [adminPwd, setAdminPwd] = useState("");
-  const [rdvs,setRdvs]=useState([]),[profs,setProfs]=useState([]);
-  const [loading,setLoading]=useState(false),[tab,setTab]=useState("today");
+  const [isUnlocked,setIsUnlocked]=useState(false);const [adminEmail,setAdminEmail]=useState("");const [adminPwd,setAdminPwd]=useState("");
+  const [rdvs,setRdvs]=useState([]),[profs,setProfs]=useState([]);const [loading,setLoading]=useState(false),[tab,setTab]=useState("today");
   const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
-
-  // FIX: un seul useEffect au lieu de deux identiques
-  useEffect(()=>{
-    const session = getAdminSession();
-    if(session){
-      setIsUnlocked(true);
-      load();
-    }
-  },[]);
-
-  // ✨ MODIFIÉ : on lit aussi le vrai état laser_access depuis Supabase
-  const load = async () => {
-    setLoading(true);
-    const [d, p] = await Promise.all([
-      api.get("rdvs", "select=*&order=date.asc,slot.asc"),
-      api.get("profiles", "select=*"),
-    ]);
-    if (Array.isArray(d)) setRdvs(d);
-    if (Array.isArray(p)) {
-      setProfs(p);
-      // Synchroniser l'état laserAccess avec ce qu'il y a vraiment dans Supabase
-      const accessMap = {};
-      p.forEach(prof => { accessMap[prof.id] = prof.laser_access || false; });
-      setLaserAccess(accessMap);
-      localStorage.setItem("laser_access", JSON.stringify(accessMap));
-    }
+  useEffect(()=>{const session=getAdminSession();if(session){setIsUnlocked(true);load();}},[]);
+  const load=async()=>{
+    setLoading(true);const[d,p]=await Promise.all([api.get("rdvs","select=*&order=date.asc,slot.asc"),api.get("profiles","select=*")]);
+    if(Array.isArray(d))setRdvs(d);
+    if(Array.isArray(p)){setProfs(p);const accessMap={};p.forEach(prof=>{accessMap[prof.id]=prof.laser_access||false;});setLaserAccess(accessMap);localStorage.setItem("laser_access",JSON.stringify(accessMap));}
     setLoading(false);
   };
-
-  // ✨ MODIFIÉ : on passe par la fonction RPC sécurisée (contourne RLS)
-  const toggleLaser = async (uid) => {
-    const newVal = !laserAccess[uid];
-
-    const res = await fetch(`${SUPA_URL}/rest/v1/rpc/admin_set_laser_access`, {
-      method: "POST",
-      headers: api.authHeaders(),
-      body: JSON.stringify({
-        target_user_id: uid,
-        new_value: newVal,
-        admin_code: "2604",
-      }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      alert("Erreur déblocage laser : " + errText);
-      return;
-    }
-
-    const updated = { ...laserAccess, [uid]: newVal };
-    setLaserAccess(updated);
-    localStorage.setItem("laser_access", JSON.stringify(updated));
+  const toggleLaser=async(uid)=>{
+    const newVal=!laserAccess[uid];
+    const res=await fetch(`${SUPA_URL}/rest/v1/rpc/admin_set_laser_access`,{method:"POST",headers:api.authHeaders(),body:JSON.stringify({target_user_id:uid,new_value:newVal,admin_code:"2604"})});
+    if(!res.ok){const errText=await res.text();alert("Erreur déblocage laser : "+errText);return;}
+    const updated={...laserAccess,[uid]:newVal};setLaserAccess(updated);localStorage.setItem("laser_access",JSON.stringify(updated));
   };
-
   const cancel=async(id)=>{
-    if(!confirm("Annuler ce rendez-vous ?"))return;
-    const rdvAnn = rdvs.find(r=>r.id===id);
-    await api.patch("rdvs",`id=eq.${id}`,{statut:"annulé"});
-    setRdvs(p=>p.map(r=>r.id===id?{...r,statut:"annulé"}:r));
-    // Email annulation + ntfy
-    if(rdvAnn) {
-      await Promise.all([
-        sendCancelEmail(rdvAnn),
-        sendPush(`❌ Annulation − ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`, `${rdvAnn.prestation} · ${fmtLong(rdvAnn.date)} à ${rdvAnn.slot}`),
-      ]);
-    }
+    if(!confirm("Annuler ce rendez-vous ?"))return;const rdvAnn=rdvs.find(r=>r.id===id);
+    await api.patch("rdvs",`id=eq.${id}`,{statut:"annulé"});setRdvs(p=>p.map(r=>r.id===id?{...r,statut:"annulé"}:r));
+    if(rdvAnn)await Promise.all([sendCancelEmail(rdvAnn),sendPush(`❌ Annulation − ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`,`${rdvAnn.prestation} · ${fmtLong(rdvAnn.date)} à ${rdvAnn.slot}`)]);
   };
-
   if(!isUnlocked) return (
-  <div className="fu" style={{padding:"0 20px",maxWidth:360,margin:"0 auto",paddingTop:60}}>
-    <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,color:C.text,marginBottom:8}}>Administration</div>
-    <div style={{marginBottom:12}}>
-      <Lbl>Email</Lbl>
-      <Inp value={adminEmail} onChange={e=>setAdminEmail(e.target.value)} type="email" placeholder="ton@email.com" autoComplete="email" />
+    <div className="fu" style={{padding:"0 20px",maxWidth:360,margin:"0 auto",paddingTop:60}}>
+      <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:28,color:C.text,marginBottom:8}}>Administration</div>
+      <div style={{marginBottom:12}}><Lbl>Email</Lbl><Inp value={adminEmail} onChange={e=>setAdminEmail(e.target.value)} type="email" placeholder="ton@email.com" autoComplete="email"/></div>
+      <div style={{marginBottom:12}}><Lbl>Mot de passe</Lbl><Inp value={adminPwd} onChange={e=>setAdminPwd(e.target.value)} type="password" placeholder="••••••••" autoComplete="current-password"/></div>
+      <div style={{display:"flex",gap:10,marginTop:4}}>
+        <GBtn onClick={onExit}>Retour</GBtn>
+        <PBtn onClick={async()=>{if(!adminEmail||!adminPwd){alert("Renseigne ton email et mot de passe");return;}const result=await adminLogin(adminEmail,adminPwd);if(result.ok){setIsUnlocked(true);load();}else alert("Connexion impossible : "+result.error);}}>Se connecter</PBtn>
+      </div>
     </div>
-    <div style={{marginBottom:12}}>
-      <Lbl>Mot de passe</Lbl>
-      <Inp value={adminPwd} onChange={e=>setAdminPwd(e.target.value)} type="password" placeholder="••••••••" autoComplete="current-password" />
-    </div>
-    <div style={{display:"flex",gap:10,marginTop:4}}>
-      <GBtn onClick={onExit}>Retour</GBtn>
-      <PBtn onClick={async()=>{
-        // Vraie connexion Supabase
-        if(!adminEmail || !adminPwd){
-          alert("Renseigne ton email et mot de passe");
-          return;
-        }
-        const result = await adminLogin(adminEmail, adminPwd);
-        if(result.ok){
-          setIsUnlocked(true);
-          load();
-        } else {
-          alert("Connexion impossible : " + result.error);
-        }
-      }}>Se connecter</PBtn>
-    </div>
-  </div>
-);
-
-  const confirmes=rdvs.filter(r=>r.statut==="confirmé");
-  const todayRdvs=rdvs.filter(r=>r.date===todayStr()&&r.statut!=="annulé").sort((a,b)=>a.slot.localeCompare(b.slot));
+  );
+  const confirmes=rdvs.filter(r=>r.statut==="confirmé");const todayRdvs=rdvs.filter(r=>r.date===todayStr()&&r.statut!=="annulé").sort((a,b)=>a.slot.localeCompare(b.slot));
   const upcoming=rdvs.filter(r=>r.date>=todayStr()&&r.statut!=="annulé").sort((a,b)=>a.date.localeCompare(b.date)||a.slot.localeCompare(b.slot));
   const groupByDate=list=>{const g={};list.forEach(r=>{if(!g[r.date])g[r.date]=[];g[r.date].push(r);});return g;};
   const svcColor=(catId)=>SERVICES.find(s=>s.id===catId)?.color||C.accent;
-
-  // ✨ NOUVEAU : calcul du CA du mois en cours et de l'année en cours
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonth = now.getMonth(); // 0-11
-  const caMoisCourant = confirmes
-    .filter(r => {
-      const d = parseD(r.date);
-      return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-    })
-    .reduce((s, r) => s + (r.prix || 0), 0);
-  const caAnneeCourante = confirmes
-    .filter(r => parseD(r.date).getFullYear() === currentYear)
-    .reduce((s, r) => s + (r.prix || 0), 0);
-  // ✏️ MODIFIÉ : nb de RDV à venir (date >= aujourd'hui) au lieu du total de l'année
-  const nbRdvAVenir = confirmes.filter(r => r.date >= todayStr()).length;
-
-  // ✨ NOUVEAU : calcul du CA mois par mois pour l'année en cours
-  // ✏️ MODIFIÉ : on inclut aussi le mois prochain même s'il bascule sur l'année suivante
-  const caParMois = (() => {
-    const tab = Array(12).fill(0).map((_,i) => ({mois:i, ca:0, nb:0}));
-    confirmes.forEach(r => {
-      const d = parseD(r.date);
-      // Mois de l'année courante
-      if(d.getFullYear() === currentYear){
-        tab[d.getMonth()].ca += (r.prix || 0);
-        tab[d.getMonth()].nb += 1;
-      }
-      // Cas spécial : si on est en décembre, on inclut janvier de l'année suivante
-      else if(currentMonth === 11 && d.getFullYear() === currentYear + 1 && d.getMonth() === 0){
-        tab[0].ca += (r.prix || 0);
-        tab[0].nb += 1;
-      }
-    });
-    return tab;
-  })();
-  const caMaxMensuel = Math.max(...caParMois.map(m => m.ca), 1); // évite division par 0
-
-  // Calcule si un RDV déclenche un palier de fidélité (pour le badge admin)
-  const getPromoFor = (r) => {
-    if(r.cat_id !== "ongles" && r.cat_id !== "spray") return null;
-    if(r.statut !== "confirmé") return null;
-    const sameClient = (x) => r.user_id ? x.user_id === r.user_id : x.client_tel === r.client_tel;
-    // On compte tous les RDV confirmés de cette cat pour ce client jusqu'à CE RDV inclus
-    // Ordre chronologique : date + slot
-    const allSame = rdvs
-      .filter(x => x.cat_id === r.cat_id && x.statut === "confirmé" && sameClient(x))
-      .sort((a,b) => (a.date+a.slot).localeCompare(b.date+b.slot));
-    const idx = allSame.findIndex(x => x.id === r.id);
-    if(idx === -1) return null;
-    const nb = idx + 1;
-    const cycle = nb % 10;
-    if(cycle === 0) return {remise:10, nb};
-    if(cycle === 5) return {remise:5, nb};
-    return null;
-  };
-    const Row=({r})=>(
+  const now=new Date();const currentYear=now.getFullYear();const currentMonth=now.getMonth();
+  const caMoisCourant=confirmes.filter(r=>{const d=parseD(r.date);return d.getFullYear()===currentYear&&d.getMonth()===currentMonth;}).reduce((s,r)=>s+(r.prix||0),0);
+  const caAnneeCourante=confirmes.filter(r=>parseD(r.date).getFullYear()===currentYear).reduce((s,r)=>s+(r.prix||0),0);
+  const nbRdvAVenir=confirmes.filter(r=>r.date>=todayStr()).length;
+  const caParMois=(()=>{const tab=Array(12).fill(0).map((_,i)=>({mois:i,ca:0,nb:0}));confirmes.forEach(r=>{const d=parseD(r.date);if(d.getFullYear()===currentYear){tab[d.getMonth()].ca+=(r.prix||0);tab[d.getMonth()].nb+=1;}else if(currentMonth===11&&d.getFullYear()===currentYear+1&&d.getMonth()===0){tab[0].ca+=(r.prix||0);tab[0].nb+=1;}});return tab;})();
+  const caMaxMensuel=Math.max(...caParMois.map(m=>m.ca),1);
+  const getPromoFor=(r)=>{if(r.cat_id!=="ongles"&&r.cat_id!=="spray")return null;if(r.statut!=="confirmé")return null;const sameClient=(x)=>r.user_id?x.user_id===r.user_id:x.client_tel===r.client_tel;const allSame=rdvs.filter(x=>x.cat_id===r.cat_id&&x.statut==="confirmé"&&sameClient(x)).sort((a,b)=>(a.date+a.slot).localeCompare(b.date+b.slot));const idx=allSame.findIndex(x=>x.id===r.id);if(idx===-1)return null;const nb=idx+1;const cycle=nb%10;if(cycle===0)return{remise:10,nb};if(cycle===5)return{remise:5,nb};return null;};
+  const Row=({r})=>(
     <div style={{padding:"16px 0",borderBottom:`1px solid ${C.borderLight}`,display:"flex",gap:14,alignItems:"flex-start",opacity:r.statut==="annulé"?.35:1}}>
-      <div style={{minWidth:44}}>
-        <div style={{fontSize:13,fontWeight:700,color:C.text}}>{r.slot}</div>
-        <div style={{fontSize:11,color:C.textLight,marginTop:2}}>{r.duree}min</div>
-      </div>
+      <div style={{minWidth:44}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>{r.slot}</div><div style={{fontSize:11,color:C.textLight,marginTop:2}}>{r.duree}min</div></div>
       <div style={{width:3,alignSelf:"stretch",borderRadius:2,background:svcColor(r.cat_id),flexShrink:0}}/>
       <div style={{flex:1,minWidth:0}}>
         <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
           <div>
-            <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
-              {r.prestation}
-              {(() => {
-                const promo = getPromoFor(r);
-                if(!promo) return null;
-                return (
-                  <span style={{fontSize:10,fontWeight:700,background:"#3a2848",color:"#f0c060",padding:"2px 8px",borderRadius:10,letterSpacing:.3}}>
-                    🎁 -{promo.remise}€ ({promo.nb}e)
-                  </span>
-                );
-              })()}
-            </div>
+            <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{r.prestation}{(()=>{const promo=getPromoFor(r);if(!promo)return null;return(<span style={{fontSize:10,fontWeight:700,background:"#3a2848",color:"#f0c060",padding:"2px 8px",borderRadius:10,letterSpacing:.3}}>🎁 -{promo.remise}€ ({promo.nb}e)</span>);})()}</div>
             <div style={{fontSize:12,color:C.textMid}}>{r.client_prenom} {r.client_nom} · {r.client_tel}</div>
           </div>
-          <div style={{textAlign:"right"}}>
-            <div style={{fontSize:14,fontWeight:700,color:C.textMid}}>{r.prix} €</div>
-
-          </div>
+          <div style={{textAlign:"right"}}><div style={{fontSize:14,fontWeight:700,color:C.textMid}}>{r.prix} €</div></div>
         </div>
-        {r.statut!=="annulé"&&(
-          <div style={{display:"flex",gap:8,marginTop:10}}>
-            <a href={`tel:${r.client_tel}`} style={{fontSize:12,color:C.textMid,textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 12px"}}>Appeler</a>
-            <button onClick={()=>cancel(r.id)} style={{fontSize:12,color:"#c05050",background:"none",border:"1px solid #f0d0d0",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Annuler</button>
-          </div>
-        )}
+        {r.statut!=="annulé"&&(<div style={{display:"flex",gap:8,marginTop:10}}><a href={`tel:${r.client_tel}`} style={{fontSize:12,color:C.textMid,textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 12px"}}>Appeler</a><button onClick={()=>cancel(r.id)} style={{fontSize:12,color:"#c05050",background:"none",border:"1px solid #f0d0d0",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Annuler</button></div>)}
         {r.statut==="annulé"&&<div style={{fontSize:11,color:"#c05050",marginTop:6}}>Annulé</div>}
       </div>
     </div>
   );
-
   return (
     <div style={{maxWidth:560,margin:"0 auto",padding:"0 20px 100px"}}>
       <div style={{paddingTop:48,paddingBottom:32}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-          <div>
-            <div style={{fontSize:10,letterSpacing:2.5,textTransform:"uppercase",color:C.textLight,marginBottom:10}}>Administration</div>
-            <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.text,letterSpacing:4,textTransform:"uppercase"}}>Neylika</div>
-          </div>
+          <div><div style={{fontSize:10,letterSpacing:2.5,textTransform:"uppercase",color:C.textLight,marginBottom:10}}>Administration</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.text,letterSpacing:4,textTransform:"uppercase"}}>Neylika</div></div>
           <div style={{display:"flex",gap:8,flexShrink:0}}>
             <button onClick={onExit} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.textMid,padding:"8px 14px",fontSize:12,cursor:"pointer"}}>Quitter</button>
             <button onClick={()=>{adminLogout();setIsUnlocked(false);setAdminEmail("");setAdminPwd("");}} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.textMid,padding:"8px 14px",fontSize:12,cursor:"pointer"}}>Déconnexion</button>
           </div>
         </div>
-
-        {/* ✨ NOUVEAU : bandeau CA mois / CA année / nb RDV année */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginTop:24}}>
-          <div style={{background:`linear-gradient(135deg, ${C.accentLight}, ${C.surface})`,border:`1.5px solid ${C.accent}`,borderRadius:12,padding:"16px 14px",boxShadow:"0 2px 10px rgba(201,160,192,.15)"}}>
-            <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:4,fontWeight:600}}>{caMoisCourant} €</div>
-            <div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.accent,fontWeight:600}}>CA {MONTHS[currentMonth]}</div>
-          </div>
-          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 14px",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
-            <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:4}}>{caAnneeCourante} €</div>
-            <div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight}}>CA {currentYear}</div>
-          </div>
-          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 14px",boxShadow:"0 1px 8px rgba(0,0,0,.04)"}}>
-            <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:4}}>{nbRdvAVenir}</div>
-            <div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight}}>RDV à venir</div>
-          </div>
+          <div style={{background:`linear-gradient(135deg,${C.accentLight},${C.surface})`,border:`1.5px solid ${C.accent}`,borderRadius:12,padding:"16px 14px"}}><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:4,fontWeight:600}}>{caMoisCourant} €</div><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.accent,fontWeight:600}}>CA {MONTHS[currentMonth]}</div></div>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 14px"}}><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:4}}>{caAnneeCourante} €</div><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight}}>CA {currentYear}</div></div>
+          <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 14px"}}><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:4}}>{nbRdvAVenir}</div><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight}}>RDV à venir</div></div>
         </div>
       </div>
-
       <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,marginBottom:24,overflowX:"auto"}}>
-        {[["today","Aujourd'hui"],["upcoming","À venir"],["all","Tous"],["create","+ Créer RDV"],["planning","Planning"],["ca","CA mensuel"],["laser","Laser 🔒"]].map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{flexShrink:0,padding:"11px 10px",background:"none",border:"none",borderBottom:`2px solid ${tab===id?C.accent:"transparent"}`,color:tab===id?C.accentDark:C.textLight,fontSize:11,fontWeight:tab===id?600:400,marginBottom:-1,letterSpacing:.3,cursor:"pointer"}}>{label}</button>
-        ))}
+        {[["today","Aujourd'hui"],["upcoming","À venir"],["all","Tous"],["create","+ Créer RDV"],["planning","Planning"],["ca","CA mensuel"],["laser","Laser 🔒"]].map(([id,label])=>(<button key={id} onClick={()=>setTab(id)} style={{flexShrink:0,padding:"11px 10px",background:"none",border:"none",borderBottom:`2px solid ${tab===id?C.accent:"transparent"}`,color:tab===id?C.accentDark:C.textLight,fontSize:11,fontWeight:tab===id?600:400,marginBottom:-1,letterSpacing:.3,cursor:"pointer"}}>{label}</button>))}
       </div>
-
       {loading&&<div style={{textAlign:"center",padding:40,color:C.textLight}}>Chargement…</div>}
-
-      {!loading&&tab==="today"&&(
-        <div>
-          <div style={{fontSize:12,color:C.textLight,marginBottom:16}}>{fmtLong(todayStr())}</div>
-          {todayRdvs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous aujourd'hui.</div>:todayRdvs.map(r=><Row key={r.id} r={r}/>)}
-        </div>
-      )}
-      {!loading&&tab==="upcoming"&&(
-        <div>
-          {upcoming.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous à venir.</div>
-            :Object.entries(groupByDate(upcoming)).map(([d,list])=>(
-              <div key={d} style={{marginBottom:28}}>
-                <div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>{fmtLong(d)}</div>
-                {list.map(r=><Row key={r.id} r={r}/>)}
-              </div>
-            ))}
-        </div>
-      )}
-      {!loading&&tab==="all"&&(
-        <div>
-          {rdvs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous.</div>
-            :Object.entries(groupByDate([...rdvs].sort((a,b)=>b.date.localeCompare(a.date)))).map(([d,list])=>(
-              <div key={d} style={{marginBottom:28}}>
-                <div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>{fmtLong(d)}</div>
-                {list.map(r=><Row key={r.id} r={r}/>)}
-              </div>
-            ))}
-        </div>
-      )}
-      {!loading&&tab==="create"&&(
-        <AdminCreateRdvView
-          allRdvs={rdvs}
-          profs={profs}
-          onCreated={(saved)=>{ setRdvs(p=>[...p, saved]); setTab("today"); }}
-        />
-      )}
-      {!loading&&tab==="planning"&&(
-        <PlanningAdmin/>
-      )}
-      {/* ✨ NOUVEAU : onglet CA mensuel détaillé */}
+      {!loading&&tab==="today"&&(<div><div style={{fontSize:12,color:C.textLight,marginBottom:16}}>{fmtLong(todayStr())}</div>{todayRdvs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous aujourd'hui.</div>:todayRdvs.map(r=><Row key={r.id} r={r}/>)}</div>)}
+      {!loading&&tab==="upcoming"&&(<div>{upcoming.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous à venir.</div>:Object.entries(groupByDate(upcoming)).map(([d,list])=>(<div key={d} style={{marginBottom:28}}><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>{fmtLong(d)}</div>{list.map(r=><Row key={r.id} r={r}/>)}</div>))}</div>)}
+      {!loading&&tab==="all"&&(<div>{rdvs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous.</div>:Object.entries(groupByDate([...rdvs].sort((a,b)=>b.date.localeCompare(a.date)))).map(([d,list])=>(<div key={d} style={{marginBottom:28}}><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>{fmtLong(d)}</div>{list.map(r=><Row key={r.id} r={r}/>)}</div>))}</div>)}
+      {!loading&&tab==="create"&&(<AdminCreateRdvView allRdvs={rdvs} profs={profs} onCreated={(saved)=>{setRdvs(p=>[...p,saved]);setTab("today");}}/>)}
+      {!loading&&tab==="planning"&&(<PlanningAdmin/>)}
       {!loading&&tab==="ca"&&(
         <div>
           <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:6}}>Chiffre d'affaires {currentYear}</div>
           <div style={{fontSize:12,color:C.textLight,marginBottom:24}}>Détail mois par mois — uniquement les RDV confirmés</div>
-
-          {/* Récap année */}
-          <div style={{background:`linear-gradient(135deg, ${C.accentLight}, ${C.surface})`,border:`1.5px solid ${C.accent}`,borderRadius:14,padding:"18px 20px",marginBottom:24,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div>
-              <div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.accent,fontWeight:600,marginBottom:4}}>Total {currentYear}</div>
-              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.text,fontWeight:600}}>{caAnneeCourante} €</div>
-            </div>
-            <div style={{textAlign:"right"}}>
-              <div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight,marginBottom:4}}>RDV à venir</div>
-              <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.textMid,fontWeight:500}}>{nbRdvAVenir}</div>
-            </div>
-          </div>
-
-          {/* ✏️ MODIFIÉ : on n'affiche que le mois en cours et le mois à venir */}
-          {caParMois
-            .filter(m => m.mois === currentMonth || m.mois === (currentMonth + 1) % 12)
-            .map(m => {
-            const isCurrent = m.mois === currentMonth;
-            const isNext = m.mois === (currentMonth + 1) % 12;
-            const pct = (m.ca / caMaxMensuel) * 100;
-            return (
-              <div key={m.mois} style={{
-                marginBottom:14,
-                padding:"14px 16px",
-                background:isCurrent?C.accentLight:C.surface,
-                border:`1px solid ${isCurrent?C.accent:C.border}`,
-                borderRadius:12,
-              }}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:14,fontWeight:isCurrent?700:500,color:isCurrent?C.accentDark:C.text}}>{MONTHS[m.mois]}</span>
-                    {isCurrent && <span style={{fontSize:9,background:C.accent,color:"#fff",padding:"2px 7px",borderRadius:8,letterSpacing:.5,fontWeight:600}}>EN COURS</span>}
-                    {isNext && <span style={{fontSize:9,background:C.border,color:C.textMid,padding:"2px 7px",borderRadius:8,letterSpacing:.5,fontWeight:600}}>À VENIR</span>}
-                  </div>
-                  <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:16,fontWeight:700,color:isCurrent?C.accentDark:C.text}}>{m.ca} €</div>
-                    <div style={{fontSize:11,color:C.textLight,marginTop:1}}>{m.nb} RDV</div>
-                  </div>
-                </div>
-                {m.ca > 0 && (
-                  <div style={{height:4,background:C.surfaceAlt,borderRadius:4,overflow:"hidden"}}>
-                    <div style={{height:"100%",width:`${pct}%`,background:isCurrent?C.accent:C.accentDark,borderRadius:4,transition:"width .8s ease"}}/>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          <div style={{background:`linear-gradient(135deg,${C.accentLight},${C.surface})`,border:`1.5px solid ${C.accent}`,borderRadius:14,padding:"18px 20px",marginBottom:24,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.accent,fontWeight:600,marginBottom:4}}>Total {currentYear}</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.text,fontWeight:600}}>{caAnneeCourante} €</div></div><div style={{textAlign:"right"}}><div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight,marginBottom:4}}>RDV à venir</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.textMid,fontWeight:500}}>{nbRdvAVenir}</div></div></div>
+          {caParMois.filter(m=>m.mois===currentMonth||m.mois===(currentMonth+1)%12).map(m=>{const isCurrent=m.mois===currentMonth;const isNext=m.mois===(currentMonth+1)%12;const pct=(m.ca/caMaxMensuel)*100;return(<div key={m.mois} style={{marginBottom:14,padding:"14px 16px",background:isCurrent?C.accentLight:C.surface,border:`1px solid ${isCurrent?C.accent:C.border}`,borderRadius:12}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:14,fontWeight:isCurrent?700:500,color:isCurrent?C.accentDark:C.text}}>{MONTHS[m.mois]}</span>{isCurrent&&<span style={{fontSize:9,background:C.accent,color:"#fff",padding:"2px 7px",borderRadius:8,letterSpacing:.5,fontWeight:600}}>EN COURS</span>}{isNext&&<span style={{fontSize:9,background:C.border,color:C.textMid,padding:"2px 7px",borderRadius:8,letterSpacing:.5,fontWeight:600}}>À VENIR</span>}</div><div style={{textAlign:"right"}}><div style={{fontSize:16,fontWeight:700,color:isCurrent?C.accentDark:C.text}}>{m.ca} €</div><div style={{fontSize:11,color:C.textLight,marginTop:1}}>{m.nb} RDV</div></div></div>{m.ca>0&&<div style={{height:4,background:C.surfaceAlt,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:isCurrent?C.accent:C.accentDark,borderRadius:4,transition:"width .8s ease"}}/></div>}</div>);})}
         </div>
       )}
       {!loading&&tab==="laser"&&(
         <div>
-          <div style={{padding:"14px 18px",background:C.locked+"44",border:`1px solid ${C.locked}`,borderRadius:12,marginBottom:24,fontSize:13,color:C.lockedText,lineHeight:1.7}}>
-            Activez l'accès laser pour chaque cliente vue en consultation. Elle pourra ensuite réserver ses séances.
-          </div>
-          {profs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucune cliente inscrite.</div>
-            :profs.map(p=>{
-              const hasAccess=laserAccess[p.id];
-              const nb=rdvs.filter(r=>r.user_id===p.id&&r.cat_id==="laser").length;
-              return (
-                <div key={p.id} style={{padding:"16px 0",borderBottom:`1px solid ${C.borderLight}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:14,fontWeight:600,color:C.text}}>{p.prenom} {p.nom}</div>
-                    <div style={{fontSize:12,color:C.textMid,marginTop:2}}>{p.tel} · {nb} séance{nb>1?"s":""} laser</div>
-                  </div>
-                  <div onClick={()=>toggleLaser(p.id)} style={{width:50,height:28,borderRadius:14,background:hasAccess?C.accent:C.border,position:"relative",cursor:"pointer",transition:"background .25s",flexShrink:0}}>
-                    <div style={{width:22,height:22,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:hasAccess?25:3,transition:"left .25s",boxShadow:"0 1px 4px rgba(0,0,0,.15)"}}/>
-                  </div>
-                </div>
-              );
-            })
-          }
+          <div style={{padding:"14px 18px",background:C.locked+"44",border:`1px solid ${C.locked}`,borderRadius:12,marginBottom:24,fontSize:13,color:C.lockedText,lineHeight:1.7}}>Activez l'accès laser pour chaque cliente vue en consultation. Elle pourra ensuite réserver ses séances.</div>
+          {profs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucune cliente inscrite.</div>:profs.map(p=>{const hasAccess=laserAccess[p.id];const nb=rdvs.filter(r=>r.user_id===p.id&&r.cat_id==="laser").length;return(<div key={p.id} style={{padding:"16px 0",borderBottom:`1px solid ${C.borderLight}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}><div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:C.text}}>{p.prenom} {p.nom}</div><div style={{fontSize:12,color:C.textMid,marginTop:2}}>{p.tel} · {nb} séance{nb>1?"s":""} laser</div></div><div onClick={()=>toggleLaser(p.id)} style={{width:50,height:28,borderRadius:14,background:hasAccess?C.accent:C.border,position:"relative",cursor:"pointer",transition:"background .25s",flexShrink:0}}><div style={{width:22,height:22,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:hasAccess?25:3,transition:"left .25s",boxShadow:"0 1px 4px rgba(0,0,0,.15)"}}/></div></div>);})}
         </div>
       )}
       {!loading&&(
         <div style={{marginTop:48}}>
           <Lbl>Répartition par service</Lbl>
-          {SERVICES.map(s=>{
-            const nb=confirmes.filter(r=>r.cat_id===s.id).length;
-            const ca=confirmes.filter(r=>r.cat_id===s.id).reduce((a,r)=>a+r.prix,0);
-            const pct=confirmes.length>0?(nb/confirmes.length)*100:0;
-            return (
-              <div key={s.id} style={{marginBottom:20}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                  <span style={{fontSize:13,color:C.textMid}}>{s.label}</span>
-                  <span style={{fontSize:13,color:C.textLight}}>{nb} RDV · {ca} €</span>
-                </div>
-                <div style={{height:3,background:C.surfaceAlt,borderRadius:3}}>
-                  <div style={{height:"100%",width:`${pct}%`,background:s.color,borderRadius:3,transition:"width .8s ease"}}/>
-                </div>
-              </div>
-            );
-          })}
+          {SERVICES.map(s=>{const nb=confirmes.filter(r=>r.cat_id===s.id).length;const ca=confirmes.filter(r=>r.cat_id===s.id).reduce((a,r)=>a+r.prix,0);const pct=confirmes.length>0?(nb/confirmes.length)*100:0;return(<div key={s.id} style={{marginBottom:20}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}><span style={{fontSize:13,color:C.textMid}}>{s.label}</span><span style={{fontSize:13,color:C.textLight}}>{nb} RDV · {ca} €</span></div><div style={{height:3,background:C.surfaceAlt,borderRadius:3}}><div style={{height:"100%",width:`${pct}%`,background:s.color,borderRadius:3,transition:"width .8s ease"}}/></div></div>);})}
         </div>
       )}
     </div>
   );
 }
 
-// ── FIDÉLITÉ ─────────────────────────────────────────────────────────────────
 function FideliteCard({rdvs}) {
-  // Compter uniquement les RDV ongles et spray tan confirmés
-  const rdvOngles = rdvs.filter(r=>r.cat_id==="ongles"&&r.statut==="confirmé").length;
-  const rdvSpray = rdvs.filter(r=>r.cat_id==="spray"&&r.statut==="confirmé").length;
-
-  const getPromo = (nb) => {
-    if(nb===0) return null;
-    const cycle = nb % 10;
-    if(cycle === 0) return {remise:10, msg:`🎁 Félicitations ! -10€ sur votre prochain RDV`};
-    if(cycle === 5) return {remise:5, msg:`🎁 Bravo ! -5€ sur votre prochain RDV`};
-    return null;
+  const rdvOngles=rdvs.filter(r=>r.cat_id==="ongles"&&r.statut==="confirmé").length;
+  const rdvSpray=rdvs.filter(r=>r.cat_id==="spray"&&r.statut==="confirmé").length;
+  const getPromo=(nb)=>{if(nb===0)return null;const cycle=nb%10;if(cycle===0)return{remise:10,msg:`🎁 Félicitations ! -10€ sur votre prochain RDV`};if(cycle===5)return{remise:5,msg:`🎁 Bravo ! -5€ sur votre prochain RDV`};return null;};
+  const getProgress=(nb)=>{const cycle=nb%10;const next=cycle<5?5-cycle:10-cycle;const nextRemise=cycle<5?5:10;return{next,nextRemise,cycle};};
+  const renderSection=(label,nb,color)=>{
+    const promo=getPromo(nb);const{next,nextRemise,cycle}=getProgress(nb);const pct=(cycle/(cycle<5?5:10))*100;
+    return (<div style={{background:C.surface,border:`1px solid ${promo?C.accent:C.border}`,borderRadius:16,padding:"18px 20px",marginBottom:12}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}><div style={{fontSize:14,fontWeight:600,color:C.text}}>{label}</div><div style={{fontSize:13,color:C.textLight}}>{nb} RDV</div></div>
+      {promo?(<div style={{background:C.accentLight,border:`1px solid ${C.accent}`,borderRadius:10,padding:"12px 14px",fontSize:13,color:C.accentDark,fontWeight:600,marginBottom:10}}>{promo.msg}<div style={{fontSize:11,color:C.textMid,fontWeight:400,marginTop:4}}>Mentionnez-le lors de votre prochain RDV 😊</div></div>):(<div style={{marginBottom:10}}><div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.textLight,marginBottom:6}}><span>Prochain avantage dans {next} RDV</span><span>-{nextRemise}€</span></div><div style={{height:4,background:C.surfaceAlt,borderRadius:4}}><div style={{height:"100%",width:`${pct}%`,background:color,borderRadius:4,transition:"width .8s ease"}}/></div></div>)}
+      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{Array(10).fill(null).map((_,i)=>(<div key={i} style={{width:22,height:22,borderRadius:"50%",background:i<(nb%10===0&&nb>0?10:nb%10)?color:C.surfaceAlt,border:`1px solid ${i<(nb%10===0&&nb>0?10:nb%10)?color:C.border}`,transition:"all .3s"}}/>))}</div>
+    </div>);
   };
-
-  const getProgress = (nb) => {
-    const cycle = nb % 10;
-    const next = cycle < 5 ? 5 - cycle : 10 - cycle;
-    const nextRemise = cycle < 5 ? 5 : 10;
-    return {next, nextRemise, cycle};
-  };
-
-  const renderSection = (label, nb, color) => {
-    const promo = getPromo(nb);
-    const {next, nextRemise, cycle} = getProgress(nb);
-    const pct = (cycle / (cycle < 5 ? 5 : 10)) * 100;
-
-    return (
-      <div style={{background:C.surface,border:`1px solid ${promo?C.accent:C.border}`,borderRadius:16,padding:"18px 20px",marginBottom:12}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-          <div style={{fontSize:14,fontWeight:600,color:C.text}}>{label}</div>
-          <div style={{fontSize:13,color:C.textLight}}>{nb} RDV</div>
-        </div>
-        {promo ? (
-          <div style={{background:C.accentLight,border:`1px solid ${C.accent}`,borderRadius:10,padding:"12px 14px",fontSize:13,color:C.accentDark,fontWeight:600,marginBottom:10}}>
-            {promo.msg}
-            <div style={{fontSize:11,color:C.textMid,fontWeight:400,marginTop:4}}>Mentionnez-le lors de votre prochain RDV 😊</div>
-          </div>
-        ) : (
-          <div style={{marginBottom:10}}>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:C.textLight,marginBottom:6}}>
-              <span>Prochain avantage dans {next} RDV</span>
-              <span>-{nextRemise}€</span>
-            </div>
-            <div style={{height:4,background:C.surfaceAlt,borderRadius:4}}>
-              <div style={{height:"100%",width:`${pct}%`,background:color,borderRadius:4,transition:"width .8s ease"}}/>
-            </div>
-          </div>
-        )}
-        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-          {Array(10).fill(null).map((_,i)=>(
-            <div key={i} style={{width:22,height:22,borderRadius:"50%",background:i<(nb%10===0&&nb>0?10:nb%10)?color:C.surfaceAlt,border:`1px solid ${i<(nb%10===0&&nb>0?10:nb%10)?color:C.border}`,transition:"all .3s"}}/>
-          ))}
-        </div>
-      </div>
-    );
-  };
-
-  if(rdvOngles===0&&rdvSpray===0) return (
-    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:"18px 20px",marginBottom:16}}>
-      <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:6}}>Programme fidélité 🎁</div>
-      <div style={{fontSize:12,color:C.textLight,lineHeight:1.7}}>Réservez vos premiers RDV ongles ou spray tan pour cumuler des avantages !</div>
-      <div style={{fontSize:11,color:C.textLight,marginTop:8}}>-5€ tous les 5 RDV · -10€ tous les 10 RDV</div>
-    </div>
-  );
-
-  return (
-    <div style={{marginBottom:16}}>
-      <div style={{fontSize:10,letterSpacing:2.5,textTransform:"uppercase",color:C.textLight,marginBottom:12,fontWeight:500}}>Programme fidélité</div>
-      {rdvOngles>0&&renderSection("Prothésie Ongulaire", rdvOngles, "#c4a882")}
-      {rdvSpray>0&&renderSection("Spray Tan", rdvSpray, "#c49060")}
-    </div>
-  );
+  if(rdvOngles===0&&rdvSpray===0) return (<div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:"18px 20px",marginBottom:16}}><div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:6}}>Programme fidélité 🎁</div><div style={{fontSize:12,color:C.textLight,lineHeight:1.7}}>Réservez vos premiers RDV ongles ou spray tan pour cumuler des avantages !</div><div style={{fontSize:11,color:C.textLight,marginTop:8}}>-5€ tous les 5 RDV · -10€ tous les 10 RDV</div></div>);
+  return (<div style={{marginBottom:16}}><div style={{fontSize:10,letterSpacing:2.5,textTransform:"uppercase",color:C.textLight,marginBottom:12,fontWeight:500}}>Programme fidélité</div>{rdvOngles>0&&renderSection("Prothésie Ongulaire",rdvOngles,"#c4a882")}{rdvSpray>0&&renderSection("Spray Tan",rdvSpray,"#c49060")}</div>);
 }
 
-// ── ROOT ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [session,setSession]=useState(null);
-  const [view,setView]=useState("main");
-  const [tab,setTab]=useState("reserver");
-  const [allRdvs,setAllRdvs]=useState([]);
-  const [clientRdvs,setClientRdvs]=useState([]);
-  const [loadingRdvs,setLoadingRdvs]=useState(false);
-  const [toast,setToast]=useState(null);
-  const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
-  const [showLoginModal,setShowLoginModal]=useState(false);
-  // FIX: gestion reset password
-  const [resetMode, setResetMode] = useState(false);
-  const [resetToken, setResetToken] = useState(null);
-
+  const [session,setSession]=useState(null);const [view,setView]=useState("main");const [tab,setTab]=useState("reserver");
+  const [allRdvs,setAllRdvs]=useState([]);const [clientRdvs,setClientRdvs]=useState([]);const [loadingRdvs,setLoadingRdvs]=useState(false);
+  const [toast,setToast]=useState(null);const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
+  const [showLoginModal,setShowLoginModal]=useState(false);const [resetMode,setResetMode]=useState(false);const [resetToken,setResetToken]=useState(null);
+  const [showSprayConseils,setShowSprayConseils]=useState(false);
   const showToast=(msg,type="ok")=>{setToast({msg,type});setTimeout(()=>setToast(null),3500);};
-
-  // FIX: détecter à l'arrivée un lien de reset password
   useEffect(()=>{
-    const hash = window.location.hash || "";
-    const search = window.location.search || "";
-    // Supabase envoie le token dans le hash : #access_token=xxx&type=recovery&...
-    if(hash.includes("type=recovery") || search.includes("reset=1")){
-      // Parser le hash
-      const params = new URLSearchParams(hash.replace(/^#/, ""));
-      const accessToken = params.get("access_token");
-      const type = params.get("type");
-      if(accessToken && type === "recovery"){
-        setResetToken(accessToken);
-        setResetMode(true);
-        // Nettoyer l'URL pour éviter de retomber dedans
-        window.history.replaceState(null, "", window.location.pathname);
-      }
+    const hash=window.location.hash||"";const search=window.location.search||"";
+    if(hash.includes("type=recovery")||search.includes("reset=1")){
+      const params=new URLSearchParams(hash.replace(/^#/,""));const accessToken=params.get("access_token");const type=params.get("type");
+      if(accessToken&&type==="recovery"){setResetToken(accessToken);setResetMode(true);window.history.replaceState(null,"",window.location.pathname);}
     }
   },[]);
-
-  // FIX: vérifier la validité de la session cliente au démarrage + refresh si expirée
   useEffect(()=>{
-    const init = async () => {
-      const saved=localStorage.getItem("nlb_sess");
-      if(!saved) return;
-      try {
-        const s = JSON.parse(saved);
-        // Si le token est expiré, on essaie de le refresh tout de suite
-        if(s.expires_at && s.expires_at * 1000 < Date.now()){
-          if(!s.refresh_token){
-            localStorage.removeItem("nlb_sess");
-            return;
-          }
-          const res = await api.refreshToken(s.refresh_token);
-          if(res.access_token){
-            const newSession = {
-              ...s,
-              token: res.access_token,
-              refresh_token: res.refresh_token || s.refresh_token,
-              expires_at: res.expires_at,
-            };
-            setSession(newSession);
-            localStorage.setItem("nlb_sess", JSON.stringify(newSession));
-          } else {
-            // Refresh failed → on supprime la session pour forcer une reconnexion
-            localStorage.removeItem("nlb_sess");
-          }
-        } else {
-          setSession(s);
-        }
-      } catch{
-        localStorage.removeItem("nlb_sess");
-      }
+    const init=async()=>{
+      const saved=localStorage.getItem("nlb_sess");if(!saved)return;
+      try{
+        const s=JSON.parse(saved);
+        if(s.expires_at&&s.expires_at*1000<Date.now()){if(!s.refresh_token){localStorage.removeItem("nlb_sess");return;}const res=await api.refreshToken(s.refresh_token);if(res.access_token){const newSession={...s,token:res.access_token,refresh_token:res.refresh_token||s.refresh_token,expires_at:res.expires_at};setSession(newSession);localStorage.setItem("nlb_sess",JSON.stringify(newSession));}else localStorage.removeItem("nlb_sess");}
+        else setSession(s);
+      }catch{localStorage.removeItem("nlb_sess");}
     };
     init();
-
     api.get("rdvs","select=*&order=date.asc").then(d=>{if(Array.isArray(d))setAllRdvs(d);});
     const onStorage=()=>setLaserAccess(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
-    window.addEventListener("storage",onStorage);
-    return ()=>window.removeEventListener("storage",onStorage);
+    window.addEventListener("storage",onStorage);return()=>window.removeEventListener("storage",onStorage);
   },[]);
-
-  // FIX CRITIQUE : rafraîchir allRdvs régulièrement et au focus pour éviter les doubles réservations
   useEffect(()=>{
-    const refreshAllRdvs = () => {
-      api.get("rdvs","select=*&order=date.asc").then(d=>{if(Array.isArray(d))setAllRdvs(d);});
-    };
-    // Toutes les 30 secondes
-    const interval = setInterval(refreshAllRdvs, 30*1000);
-    // Quand l'utilisateur revient sur l'onglet (depuis un autre onglet/app)
-    const onVisible = () => { if(document.visibilityState === "visible") refreshAllRdvs(); };
-    document.addEventListener("visibilitychange", onVisible);
-    // Quand la fenêtre reprend le focus
-    window.addEventListener("focus", refreshAllRdvs);
-    return () => {
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", refreshAllRdvs);
-    };
+    const refreshAllRdvs=()=>{api.get("rdvs","select=*&order=date.asc").then(d=>{if(Array.isArray(d))setAllRdvs(d);});};
+    const interval=setInterval(refreshAllRdvs,30*1000);
+    const onVisible=()=>{if(document.visibilityState==="visible")refreshAllRdvs();};
+    document.addEventListener("visibilitychange",onVisible);window.addEventListener("focus",refreshAllRdvs);
+    return()=>{clearInterval(interval);document.removeEventListener("visibilitychange",onVisible);window.removeEventListener("focus",refreshAllRdvs);};
   },[]);
-
   useEffect(()=>{
-    if(!session)return;
-    setLoadingRdvs(true);
-    fetch(`${SUPA_URL}/rest/v1/rdvs?select=*&user_id=eq.${session.user.id}&order=date.asc`,{
-      headers:{
-        "apikey":SUPA_KEY,
-        "Authorization":`Bearer ${session.token}`,
-        "Content-Type":"application/json",
-      }
-    }).then(r=>r.json()).then(d=>{
-      if(Array.isArray(d))setClientRdvs(d);
-      setLoadingRdvs(false);
-    }).catch(e=>{
-      console.log("Erreur chargement RDV cliente:",e);
-      setLoadingRdvs(false);
-    });
+    if(!session)return;setLoadingRdvs(true);
+    fetch(`${SUPA_URL}/rest/v1/rdvs?select=*&user_id=eq.${session.user.id}&order=date.asc`,{headers:{"apikey":SUPA_KEY,"Authorization":`Bearer ${session.token}`,"Content-Type":"application/json"}})
+      .then(r=>r.json()).then(d=>{if(Array.isArray(d))setClientRdvs(d);setLoadingRdvs(false);}).catch(e=>{console.log("Erreur chargement RDV cliente:",e);setLoadingRdvs(false);});
   },[session]);
-
   const handleAuth=(s)=>{setSession(s);localStorage.setItem("nlb_sess",JSON.stringify(s));showToast(`Bienvenue ${s.profile?.prenom||""} !`);};
-  
-  // Refresh automatique du token toutes les 50 minutes
   useEffect(()=>{
-    const interval = setInterval(async()=>{
-      const saved = localStorage.getItem("nlb_sess");
-      if(!saved) return;
-      try {
-        const s = JSON.parse(saved);
-        if(!s.refresh_token) return;
-        const res = await api.refreshToken(s.refresh_token);
-        if(res.access_token) {
-          const newSession = {...s, token: res.access_token, refresh_token: res.refresh_token||s.refresh_token, expires_at: res.expires_at};
-          setSession(newSession);
-          localStorage.setItem("nlb_sess", JSON.stringify(newSession));
-        }
-      } catch(e) { console.log("Refresh failed:", e); }
-    }, 50*60*1000);
-    return ()=>clearInterval(interval);
+    const interval=setInterval(async()=>{
+      const saved=localStorage.getItem("nlb_sess");if(!saved)return;
+      try{const s=JSON.parse(saved);if(!s.refresh_token)return;const res=await api.refreshToken(s.refresh_token);if(res.access_token){const newSession={...s,token:res.access_token,refresh_token:res.refresh_token||s.refresh_token,expires_at:res.expires_at};setSession(newSession);localStorage.setItem("nlb_sess",JSON.stringify(newSession));}}catch(e){console.log("Refresh failed:",e);}
+    },50*60*1000);return()=>clearInterval(interval);
   },[]);
   const handleBooked=(rdv)=>{setAllRdvs(p=>[...p,rdv]);setClientRdvs(p=>[...p,rdv]);setTab("mesrdvs");showToast("Rendez-vous confirmé !");};
   const handleLogout=async()=>{if(session?.token)await api.signOut(session.token);localStorage.removeItem("nlb_sess");setSession(null);setClientRdvs([]);showToast("Déconnecté·e");};
-
-  // FIX: callback pour mettre à jour la liste de RDV sans reload brutal
-  const handleRdvCancelled=(rdvId)=>{
-    setClientRdvs(p=>p.map(r=>r.id===rdvId?{...r,statut:"annulé"}:r));
-    setAllRdvs(p=>p.map(r=>r.id===rdvId?{...r,statut:"annulé"}:r));
-    showToast("Rendez-vous annulé");
-  };
-
-  const [supaLaserAccess, setSupaLaserAccess] = useState(false);
-  useEffect(()=>{
-    if(!session) return;
-    api.get("profiles",`id=eq.${session.user.id}&select=laser_access`).then(d=>{
-      if(Array.isArray(d)&&d[0]) setSupaLaserAccess(d[0].laser_access||false);
-    });
-  },[session]);
+  const handleRdvCancelled=(rdvId)=>{setClientRdvs(p=>p.map(r=>r.id===rdvId?{...r,statut:"annulé"}:r));setAllRdvs(p=>p.map(r=>r.id===rdvId?{...r,statut:"annulé"}:r));showToast("Rendez-vous annulé");};
+  const [supaLaserAccess,setSupaLaserAccess]=useState(false);
+  useEffect(()=>{if(!session)return;api.get("profiles",`id=eq.${session.user.id}&select=laser_access`).then(d=>{if(Array.isArray(d)&&d[0])setSupaLaserAccess(d[0].laser_access||false);});},[session]);
   const laserUnlocked=supaLaserAccess;
-
-  // FIX: si on est en mode reset password, on affiche que ça
-  if(resetMode && resetToken) return (
-    <div style={{minHeight:"100vh",background:C.bg}}>
-      <GS/>
-      <ResetPasswordView accessToken={resetToken} onDone={()=>{
-        setResetMode(false);
-        setResetToken(null);
-        showToast("Mot de passe modifié. Connectez-vous.");
-      }}/>
-    </div>
-  );
-
+  const hasSprayRdv=clientRdvs.some(r=>r.cat_id==="spray"&&r.statut==="confirmé");
+  if(resetMode&&resetToken) return (<div style={{minHeight:"100vh",background:C.bg}}><GS/><ResetPasswordView accessToken={resetToken} onDone={()=>{setResetMode(false);setResetToken(null);showToast("Mot de passe modifié. Connectez-vous.");}}/></div>);
   if(view==="admin") return <div style={{minHeight:"100vh",background:C.bg}}><GS/>{toast&&<Toast {...toast}/>}<AdminView onExit={()=>setView("main")}/></div>;
-
   return (
     <div style={{minHeight:"100vh",background:C.bg}}>
       <GS/>
@@ -2171,77 +1073,61 @@ export default function App() {
       {showLoginModal&&<AuthModal onAuth={(s)=>{handleAuth(s);setShowLoginModal(false);setTab("compte");}} onClose={()=>setShowLoginModal(false)} booking={null}/>}
       <div style={{maxWidth:520,margin:"0 auto",padding:"0 20px 100px"}}>
         <div style={{paddingTop:48,paddingBottom:36}}>
-          <div style={{fontSize:9,letterSpacing:3,textTransform:"uppercase",color:"#c0b0d8",marginBottom:12,fontSize:11}}>Institut de beauté · Toulouse — Cartoucherie</div>
+          <div style={{fontSize:11,letterSpacing:3,textTransform:"uppercase",color:"#c0b0d8",marginBottom:12}}>Institut de beauté · Toulouse — Cartoucherie</div>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <h1 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:42,fontWeight:300,color:C.text,lineHeight:1,letterSpacing:6,textTransform:"uppercase"}}>Neylika</h1>
-            {session?(
-              <div style={{textAlign:"right"}}>
-                <div style={{fontSize:13,fontWeight:500,color:C.textMid}}>{session.profile?.prenom}</div>
-                <button onClick={handleLogout} style={{fontSize:11,color:C.textLight,background:"none",border:"none",cursor:"pointer",marginTop:2}}>Déconnexion</button>
-              </div>
-            ):(
-              <button onClick={()=>setShowLoginModal(true)} style={{fontSize:13,color:"#d4c4e8",background:"none",border:`1px solid ${C.border}`,borderRadius:20,padding:"8px 16px",cursor:"pointer"}}>Se connecter</button>
-            )}
+            {session?(<div style={{textAlign:"right"}}><div style={{fontSize:13,fontWeight:500,color:C.textMid}}>{session.profile?.prenom}</div><button onClick={handleLogout} style={{fontSize:11,color:C.textLight,background:"none",border:"none",cursor:"pointer",marginTop:2}}>Déconnexion</button></div>):(<button onClick={()=>setShowLoginModal(true)} style={{fontSize:13,color:"#d4c4e8",background:"none",border:`1px solid ${C.border}`,borderRadius:20,padding:"8px 16px",cursor:"pointer"}}>Se connecter</button>)}
           </div>
           <p style={{fontSize:15,color:"#d4c4ec",marginTop:10,lineHeight:1.7,letterSpacing:.5,fontStyle:"italic"}}>Ton adresse beauté à la Cartoucherie · Ongles · Laser · Bronzage</p>
           <div style={{display:"flex",gap:12,marginTop:12,alignItems:"center"}}>
             <a href="https://www.instagram.com/neylika31/" target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,textDecoration:"none"}}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="2" y="2" width="20" height="20" rx="6" stroke="#c9a0c0" strokeWidth="1.5"/>
-                <circle cx="12" cy="12" r="4" stroke="#c9a0c0" strokeWidth="1.5"/>
-                <circle cx="17.5" cy="6.5" r="1" fill="#c9a0c0"/>
-              </svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="2" width="20" height="20" rx="6" stroke="#c9a0c0" strokeWidth="1.5"/><circle cx="12" cy="12" r="4" stroke="#c9a0c0" strokeWidth="1.5"/><circle cx="17.5" cy="6.5" r="1" fill="#c9a0c0"/></svg>
               <span style={{fontSize:16,color:C.accent,letterSpacing:.5,fontWeight:500}}>@neylika31</span>
             </a>
             <a href="https://ig.me/m/neylika31" target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,textDecoration:"none",background:C.accentLight,border:`1px solid ${C.accent}`,borderRadius:20,padding:"5px 12px"}}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.96 9.96 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z" stroke="#c9a0c0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                <circle cx="8.5" cy="12" r="1" fill="#c9a0c0"/>
-                <circle cx="12" cy="12" r="1" fill="#c9a0c0"/>
-                <circle cx="15.5" cy="12" r="1" fill="#c9a0c0"/>
-              </svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.96 9.96 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z" stroke="#c9a0c0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="8.5" cy="12" r="1" fill="#c9a0c0"/><circle cx="12" cy="12" r="1" fill="#c9a0c0"/><circle cx="15.5" cy="12" r="1" fill="#c9a0c0"/></svg>
               <span style={{fontSize:12,color:C.accent}}>Me contacter</span>
             </a>
           </div>
         </div>
-
         {tab==="reserver"&&<ReservationView session={session} allRdvs={allRdvs} onBooked={handleBooked} laserUnlocked={laserUnlocked} onAuth={handleAuth}/>}
-
         {tab==="mesrdvs"&&(
           <div className="fu">
             <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,marginBottom:24}}>Mes rendez-vous</div>
             {!session?<div style={{textAlign:"center",padding:"48px 0",color:C.textLight}}><div style={{fontSize:14,marginBottom:20}}>Connectez-vous pour voir vos rendez-vous.</div><PBtn onClick={()=>setTab("reserver")} style={{maxWidth:220,margin:"0 auto"}}>Réserver</PBtn></div>:<MesRdvsView rdvs={clientRdvs} loading={loadingRdvs} session={session} onRdvCancelled={handleRdvCancelled}/>}
           </div>
         )}
-
         {tab==="compte"&&(
           <div className="fu">
-            <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,marginBottom:24}}>Mon compte</div>
-            {!session?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Connectez-vous d'abord.</div>:(
+            {showSprayConseils?(
+              <SprayTanConseilsPage onClose={()=>setShowSprayConseils(false)}/>
+            ):(
               <>
-                <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:"4px 20px",marginBottom:16}}>
-                  {[["Prénom",session.profile?.prenom],["Nom",session.profile?.nom],["Téléphone",session.profile?.tel],["Email",session.user?.email]].map(([k,v])=>(
-                    <div key={k} style={{display:"flex",justifyContent:"space-between",padding:"13px 0",borderBottom:`1px solid ${C.borderLight}`,fontSize:14}}>
-                      <span style={{color:C.textLight}}>{k}</span><span style={{color:C.textMid,fontWeight:500}}>{v||"—"}</span>
+                <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,marginBottom:24}}>Mon compte</div>
+                {!session?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Connectez-vous d'abord.</div>:(
+                  <>
+                    <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:16,padding:"4px 20px",marginBottom:16}}>
+                      {[["Prénom",session.profile?.prenom],["Nom",session.profile?.nom],["Téléphone",session.profile?.tel],["Email",session.user?.email]].map(([k,v])=>(<div key={k} style={{display:"flex",justifyContent:"space-between",padding:"13px 0",borderBottom:`1px solid ${C.borderLight}`,fontSize:14}}><span style={{color:C.textLight}}>{k}</span><span style={{color:C.textMid,fontWeight:500}}>{v||"—"}</span></div>))}
                     </div>
-                  ))}
-                </div>
-                {laserUnlocked&&<div style={{padding:"12px 16px",background:C.locked+"44",border:`1px solid ${C.locked}`,borderRadius:12,marginBottom:16,fontSize:13,color:C.lockedText}}>✓ Accès laser activé — vous pouvez réserver vos séances.</div>}
-                <FideliteCard rdvs={clientRdvs}/>
-                <GBtn onClick={handleLogout}>Se déconnecter</GBtn>
+                    {laserUnlocked&&<div style={{padding:"12px 16px",background:C.locked+"44",border:`1px solid ${C.locked}`,borderRadius:12,marginBottom:16,fontSize:13,color:C.lockedText}}>✓ Accès laser activé — vous pouvez réserver vos séances.</div>}
+                    {hasSprayRdv&&(
+                      <div onClick={()=>setShowSprayConseils(true)} style={{background:C.tanLight,border:`1.5px solid ${C.tanGold}`,borderRadius:14,padding:"16px 20px",marginBottom:16,cursor:"pointer",display:"flex",alignItems:"center",gap:14}}>
+                        <span style={{fontSize:24}}>🌟</span>
+                        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:600,color:C.tanGold,marginBottom:3}}>Conseils Spray Tan</div><div style={{fontSize:12,color:C.textMid,lineHeight:1.5}}>Retrouvez vos recommandations avant et après séance</div></div>
+                        <span style={{color:C.tanGold,fontSize:18}}>›</span>
+                      </div>
+                    )}
+                    <FideliteCard rdvs={clientRdvs}/>
+                    <GBtn onClick={handleLogout}>Se déconnecter</GBtn>
+                  </>
+                )}
               </>
             )}
           </div>
         )}
       </div>
-
       <div style={{position:"fixed",bottom:0,left:0,right:0,background:C.surface,borderTop:`1px solid ${C.border}`,display:"flex",boxShadow:"0 -4px 18px rgba(0,0,0,.05)"}}>
-        {[["reserver","Réserver"],["mesrdvs","Mes RDV"],["compte","Compte"]].map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"14px 8px 20px",background:"none",border:"none",color:tab===id?C.accentDark:C.textLight,fontSize:11,letterSpacing:1.5,textTransform:"uppercase",fontWeight:tab===id?600:400,cursor:"pointer",position:"relative",transition:"color .2s"}}>
-            {label}
-            {tab===id&&<div style={{position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",width:24,height:2,background:C.accent,borderRadius:1}}/>}
-          </button>
-        ))}
+        {[["reserver","Réserver"],["mesrdvs","Mes RDV"],["compte","Compte"]].map(([id,label])=>(<button key={id} onClick={()=>{setTab(id);setShowSprayConseils(false);}} style={{flex:1,padding:"14px 8px 20px",background:"none",border:"none",color:tab===id?C.accentDark:C.textLight,fontSize:11,letterSpacing:1.5,textTransform:"uppercase",fontWeight:tab===id?600:400,cursor:"pointer",position:"relative",transition:"color .2s"}}>{label}{tab===id&&<div style={{position:"absolute",top:0,left:"50%",transform:"translateX(-50%)",width:24,height:2,background:C.accent,borderRadius:1}}/>}</button>))}
         <button onClick={()=>setView("admin")} style={{padding:"14px 16px 20px",background:"none",border:"none",color:C.borderLight,fontSize:10,letterSpacing:1,cursor:"pointer"}}>⚙</button>
       </div>
     </div>
