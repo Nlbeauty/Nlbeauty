@@ -760,11 +760,90 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
   );
 }
 
-function MesRdvsView({rdvs,loading,session,onRdvCancelled}) {
+function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}) {
   const up=rdvs.filter(r=>r.date>=todayStr()&&r.statut!=="annulé").sort((a,b)=>a.date.localeCompare(b.date));
   const past=rdvs.filter(r=>r.date<todayStr()||r.statut==="annulé").sort((a,b)=>b.date.localeCompare(a.date));
   const svcColor=(catId)=>SERVICES.find(s=>s.id===catId)?.color||C.accent;
-  const [cancelling,setCancelling]=useState(false);const [cancelError,setCancelError]=useState("");
+  const [cancelling,setCancelling]=useState(false);
+  const [cancelError,setCancelError]=useState("");
+  // État pour le flow modification
+  const [modifyingRdv,setModifyingRdv]=useState(null);
+  const [newDate,setNewDate]=useState("");
+  const [newSlot,setNewSlot]=useState("");
+  const [modifying,setModifying]=useState(false);
+  const [modifyError,setModifyError]=useState("");
+  const [modifyDone,setModifyDone]=useState(false);
+  const [allSupaBlocked,setAllSupaBlocked]=useState({});
+
+  const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const SEMAINE_M=["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const WEEKEND_M=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+
+  useEffect(()=>{
+    if(!modifyingRdv)return;
+    api.get("blocked_slots","select=date,slot").then(d=>{
+      if(!Array.isArray(d))return;
+      const map={};d.forEach(r=>{if(!map[r.date])map[r.date]=[];map[r.date].push(r.slot);});
+      setAllSupaBlocked(map);
+    });
+  },[modifyingRdv]);
+
+  const getAvailSlotsModify=(dateStr,rdv)=>{
+    const dow=parseD(dateStr).getDay();const isWE=dow===0||dow===6;const allowed=isWE?WEEKEND_M:SEMAINE_M;
+    const dur=rdv?.duree||30;const slotsNeeded=Math.ceil(dur/30);
+    // Exclure le RDV en cours de modification des rdvs pris
+    const rdvsDay=(allRdvs||[]).filter(r=>r.date===dateStr&&r.statut!=="annulé"&&r.id!==rdv?.id);
+    const supaDay=allSupaBlocked[dateStr]||[];const avail=[];
+    for(let j=0;j<=allowed.length-slotsNeeded;j++){
+      let ok=true;
+      for(let k=0;k<slotsNeeded;k++){
+        const sl=allowed[j+k];if(!sl){ok=false;break;}if(supaDay.includes(sl)){ok=false;break;}
+        const slotDateTime=new Date(`${dateStr}T${sl}:00`);
+        if(slotDateTime.getTime()-Date.now()<24*60*60*1000){ok=false;break;}
+        const idx=ALL_SLOTS.indexOf(sl);
+        for(const r of rdvsDay){const rIdx=ALL_SLOTS.indexOf(r.slot);const rEnd=rIdx+Math.ceil((r.duree||30)/30);if(idx>=rIdx&&idx<rEnd){ok=false;break;}}
+        if(!ok)break;
+      }
+      if(ok)avail.push(allowed[j]);
+    }
+    return avail;
+  };
+
+  const canModify=(r)=>{const rdvDate=new Date(`${r.date}T${r.slot}:00`);return rdvDate.getTime()-Date.now()>24*60*60*1000;};
+
+  const handleModify=async()=>{
+    if(!newDate||!newSlot){setModifyError("Choisissez une date et un créneau.");return;}
+    if(modifying)return;
+    setModifying(true);setModifyError("");
+    try{
+      const token=session?.token;if(!token){setModifyError("Session expirée.");setModifying(false);return;}
+      // Vérification live anti-doublon
+      const liveRdvs=await api.get("rdvs",`date=eq.${newDate}&statut=neq.annulé&select=id,slot,duree`);
+      if(Array.isArray(liveRdvs)){
+        const wantedIdx=ALL_SLOTS.indexOf(newSlot);const slotsNeeded=Math.ceil((modifyingRdv.duree||30)/30);
+        for(const r of liveRdvs){
+          if(r.id===modifyingRdv.id)continue;
+          const rIdx=ALL_SLOTS.indexOf(r.slot);if(rIdx===-1)continue;
+          const rEnd=rIdx+Math.ceil((r.duree||30)/30);
+          if(wantedIdx<rEnd&&wantedIdx+slotsNeeded>rIdx){setModifyError("Ce créneau vient d'être pris. Choisissez-en un autre.");setModifying(false);return;}
+        }
+      }
+      const res=await api.patch("rdvs",`id=eq.${modifyingRdv.id}`,{date:newDate,slot:newSlot},token);
+      const updated=Array.isArray(res)?res[0]:res;
+      if(!updated||updated.error){setModifyError("Impossible de modifier. Contactez-nous.");setModifying(false);return;}
+      // Email confirmation nouveau créneau + notif push
+      const rdvUpdated={...modifyingRdv,date:newDate,slot:newSlot};
+      await Promise.all([
+        sendEmails(rdvUpdated,session.user.email),
+        sendPush(`✏️ Modification − ${modifyingRdv.client_prenom} ${modifyingRdv.client_nom}`,`${modifyingRdv.prestation} · ${fmtLong(newDate)} à ${newSlot} (était ${fmtLong(modifyingRdv.date)} à ${modifyingRdv.slot})`),
+      ]);
+      if(onRdvModified)onRdvModified(modifyingRdv.id,{date:newDate,slot:newSlot});
+      setModifyDone(true);
+      setTimeout(()=>{setModifyingRdv(null);setModifyDone(false);setNewDate("");setNewSlot("");},2000);
+    }catch(e){setModifyError("Erreur réseau. Réessayez.");}
+    setModifying(false);
+  };
+
   const canCancel=(r)=>{const rdvDate=new Date(`${r.date}T${r.slot}:00`);const now=new Date();return rdvDate.getTime()-now.getTime()>24*60*60*1000;};
   const handleCancel=async(r)=>{
     if(!confirm("Annuler ce rendez-vous ?"))return;if(cancelling)return;setCancelling(true);setCancelError("");
@@ -777,8 +856,65 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled}) {
     }catch(e){console.log("Erreur annulation:",e);setCancelError("Erreur réseau. Réessayez.");}
     setCancelling(false);
   };
+
+  // Petit calendrier inline pour la modification
+  const ModifyPicker=({rdv})=>{
+    const DAYS_S_M=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
+    const MONTHS_M=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+    const DAYS_L_M=["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+    const today=new Date();const minDate=new Date(today.getTime()+24*60*60*1000);const minDateStr=minDate.toISOString().split("T")[0];
+    const [yr,setYr]=useState(today.getFullYear());const [mo,setMo]=useState(today.getMonth());
+    const firstDayOfMonth=(new Date(yr,mo,1).getDay()||7)-1;const daysInMonth=new Date(yr,mo+1,0).getDate();
+    const maxDate=new Date(today.getTime()+49*24*60*60*1000);const maxYr=maxDate.getFullYear();const maxMo=maxDate.getMonth();
+    const nextDisabled=(yr>maxYr)||(yr===maxYr&&mo>=maxMo);const prevDisabled=(yr<today.getFullYear())||(yr===today.getFullYear()&&mo<=today.getMonth());
+    const availSlots=newDate?getAvailSlotsModify(newDate,rdv):[];
+    if(modifyDone)return <div style={{textAlign:"center",padding:"20px 0",color:"#a0c090",fontSize:14,fontWeight:600}}>✓ Rendez-vous déplacé ! Un email de confirmation vous a été envoyé.</div>;
+    return (
+      <div style={{marginTop:12,padding:"14px",background:C.surfaceAlt,borderRadius:12,border:`1px solid ${C.border}`}}>
+        <div style={{fontSize:11,color:C.textLight,marginBottom:12,letterSpacing:1,textTransform:"uppercase"}}>Choisir un nouveau créneau</div>
+        {/* Calendrier */}
+        <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 12px",marginBottom:12}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <button onClick={()=>{if(prevDisabled)return;mo===0?(setMo(11),setYr(yr-1)):setMo(mo-1);}} disabled={prevDisabled} style={{background:"none",border:"none",color:prevDisabled?C.borderLight:C.textLight,fontSize:20,cursor:prevDisabled?"default":"pointer",padding:"0 6px",opacity:prevDisabled?.3:1}}>‹</button>
+            <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:15,color:C.text}}>{MONTHS_M[mo]} {yr}</span>
+            <button onClick={()=>{if(nextDisabled)return;mo===11?(setMo(0),setYr(yr+1)):setMo(mo+1);}} disabled={nextDisabled} style={{background:"none",border:"none",color:nextDisabled?C.borderLight:C.textLight,fontSize:20,cursor:nextDisabled?"default":"pointer",padding:"0 6px",opacity:nextDisabled?.3:1}}>›</button>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:6}}>
+            {DAYS_S_M.map(d=><div key={d} style={{textAlign:"center",fontSize:9,color:C.textLight,fontWeight:500,letterSpacing:.5,textTransform:"uppercase",paddingBottom:6}}>{d}</div>)}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"3px 0"}}>
+            {Array(firstDayOfMonth).fill(null).map((_,i)=><div key={`e${i}`}/>)}
+            {Array(daysInMonth).fill(null).map((_,i)=>{
+              const d=i+1;const ds=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+              const isPast=ds<minDateStr;const avail=!isPast?getAvailSlotsModify(ds,rdv):[];const hasDispo=avail.length>0;const isSel=ds===newDate;
+              return(<div key={d} onClick={()=>{if(hasDispo&&!isPast){setNewDate(ds);setNewSlot("");}}} style={{textAlign:"center",padding:"7px 2px",borderRadius:6,cursor:hasDispo&&!isPast?"pointer":"default",background:isSel?C.accent:"transparent",color:isSel?"#fff":isPast||!hasDispo?"#3a3040":C.text,fontWeight:isSel?700:400,fontSize:12,position:"relative"}}>
+                {d}{hasDispo&&!isSel&&<div style={{width:3,height:3,borderRadius:"50%",background:C.accent,position:"absolute",bottom:1,left:"50%",transform:"translateX(-50%)"}}/>}
+              </div>);
+            })}
+          </div>
+        </div>
+        {/* Créneaux */}
+        {newDate&&availSlots.length>0&&(
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:11,color:C.textMid,marginBottom:8}}>{DAYS_L_M[parseD(newDate).getDay()]} {parseD(newDate).getDate()} {MONTHS_M[parseD(newDate).getMonth()]}</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6}}>
+              {availSlots.map(s=>{const active=newSlot===s;return(<div key={s} onClick={()=>setNewSlot(s)} style={{padding:"10px 4px",textAlign:"center",borderRadius:8,border:`1.5px solid ${active?C.accent:C.border}`,background:active?C.accent:C.surface,color:active?"#fff":C.textMid,fontSize:12,fontWeight:active?700:400,cursor:"pointer"}}>{s}</div>);})}
+            </div>
+          </div>
+        )}
+        {newDate&&availSlots.length===0&&<div style={{fontSize:12,color:C.textLight,marginBottom:12,textAlign:"center"}}>Aucun créneau disponible ce jour.</div>}
+        {modifyError&&<div style={{fontSize:12,color:"#f08080",marginBottom:10,padding:"8px 12px",background:"#2a1010",border:"1px solid #5a2020",borderRadius:8}}>{modifyError}</div>}
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>{setModifyingRdv(null);setNewDate("");setNewSlot("");setModifyError("");}} style={{flex:1,padding:"9px",borderRadius:8,border:`1px solid ${C.border}`,background:"none",color:C.textMid,fontSize:12,cursor:"pointer"}}>Annuler</button>
+          <button onClick={handleModify} disabled={!newDate||!newSlot||modifying} style={{flex:2,padding:"9px",borderRadius:8,border:"none",background:(!newDate||!newSlot||modifying)?C.border:`linear-gradient(135deg,#c9a0c0,#7a4878)`,color:(!newDate||!newSlot||modifying)?C.textLight:"#fff",fontSize:12,fontWeight:600,cursor:(!newDate||!newSlot||modifying)?"default":"pointer"}}>{modifying?"Déplacement…":"Confirmer le déplacement"}</button>
+        </div>
+      </div>
+    );
+  };
+
   const Card=({r})=>{
     const isUpcoming=r.statut!=="annulé"&&r.date>=todayStr();
+    const isModifying=modifyingRdv?.id===r.id;
     return (
       <div style={{padding:"16px 0",borderBottom:`1px solid ${C.borderLight}`,display:"flex",gap:14,alignItems:"stretch",opacity:r.statut==="annulé"?0.5:1}}>
         <div style={{width:3,alignSelf:"stretch",borderRadius:2,background:svcColor(r.cat_id),flexShrink:0}}/>
@@ -790,7 +926,12 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled}) {
             {r.statut==="annulé"&&<div style={{fontSize:12,color:"#c05050",marginTop:6}}>Annulé</div>}
           </div>
           {isUpcoming&&<AdresseBlock/>}
-          {isUpcoming&&canCancel(r)&&(<button onClick={()=>handleCancel(r)} disabled={cancelling} style={{marginTop:14,width:"100%",fontSize:12,color:cancelling?C.textLight:"#c05050",background:"none",border:`1px solid ${cancelling?C.border:"#3a1a1a"}`,borderRadius:8,padding:"9px",cursor:cancelling?"default":"pointer"}}>{cancelling?"Annulation en cours…":"Annuler le rendez-vous"}</button>)}
+          {isUpcoming&&canModify(r)&&(
+            <button onClick={()=>{setModifyingRdv(isModifying?null:r);setNewDate("");setNewSlot("");setModifyError("");}} style={{marginTop:14,width:"100%",fontSize:12,color:isModifying?C.textLight:C.accentDark,background:"none",border:`1px solid ${isModifying?C.border:C.accent}`,borderRadius:8,padding:"9px",cursor:"pointer"}}>
+              {isModifying?"✕ Fermer":"📅 Modifier / Déplacer"}
+            </button>
+          )}
+          {isModifying&&<ModifyPicker rdv={r}/>}
         </div>
       </div>
     );
@@ -932,16 +1073,28 @@ function AdminView({onExit}) {
   const [editingId,setEditingId]=useState(null);
   const [editPrix,setEditPrix]=useState("");
   const [editPresta,setEditPresta]=useState("");
+  const [editDate,setEditDate]=useState("");
+  const [editSlot,setEditSlot]=useState("");
   const [editSaving,setEditSaving]=useState(false);
+  const ALL_SLOTS_ADMIN=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const saveEdit=async(r)=>{
     setEditSaving(true);
     const body={};
     if(editPresta.trim()&&editPresta.trim()!==r.prestation) body.prestation=editPresta.trim();
     const p=parseFloat(editPrix);
     if(!isNaN(p)&&p!==r.prix) body.prix=p;
+    if(editDate&&editDate!==r.date) body.date=editDate;
+    if(editSlot&&editSlot!==r.slot) body.slot=editSlot;
     if(Object.keys(body).length>0){
       await api.patch("rdvs",`id=eq.${r.id}`,body);
       setRdvs(prev=>prev.map(x=>x.id===r.id?{...x,...body}:x));
+      // Notif push si date ou slot changé
+      if(body.date||body.slot){
+        const nd=body.date||r.date;const ns=body.slot||r.slot;
+        await sendPush(`✏️ Déplacé (admin) − ${r.client_prenom} ${r.client_nom}`,`${r.prestation} · ${fmtLong(nd)} à ${ns}`);
+        // Email confirmation avec nouveau créneau
+        await sendEmails({...r,...body},r.client_email);
+      }
     }
     setEditingId(null);setEditSaving(false);
   };
@@ -960,7 +1113,7 @@ function AdminView({onExit}) {
           </div>
           <div style={{textAlign:"right",display:"flex",alignItems:"center",gap:8}}>
             <div style={{fontSize:14,fontWeight:700,color:C.textMid}}>{r.prix} €</div>
-            {r.statut!=="annulé"&&<button onClick={()=>{setEditingId(isEditing?null:r.id);setEditPrix(String(r.prix));setEditPresta(r.prestation);}} style={{fontSize:11,color:C.textLight,background:"none",border:`1px solid ${C.border}`,borderRadius:7,padding:"3px 8px",cursor:"pointer"}}>{isEditing?"✕":"✏️"}</button>}
+            {r.statut!=="annulé"&&<button onClick={()=>{setEditingId(isEditing?null:r.id);setEditPrix(String(r.prix));setEditPresta(r.prestation);setEditDate(r.date);setEditSlot(r.slot);}} style={{fontSize:11,color:C.textLight,background:"none",border:`1px solid ${C.border}`,borderRadius:7,padding:"3px 8px",cursor:"pointer"}}>{isEditing?"✕":"✏️"}</button>}
           </div>
         </div>
         {/* Mode édition */}
@@ -971,9 +1124,23 @@ function AdminView({onExit}) {
               <div style={{fontSize:11,color:C.textLight,marginBottom:4}}>Prestation</div>
               <input value={editPresta} onChange={e=>setEditPresta(e.target.value)} style={{width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,color:C.text,fontSize:13}}/>
             </div>
-            <div style={{marginBottom:10}}>
+            <div style={{marginBottom:8}}>
               <div style={{fontSize:11,color:C.textLight,marginBottom:4}}>Prix (€)</div>
               <input value={editPrix} onChange={e=>setEditPrix(e.target.value)} type="number" style={{width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,color:C.text,fontSize:13}}/>
+            </div>
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:11,color:C.textLight,marginBottom:4}}>Date</div>
+              <input value={editDate} onChange={e=>{setEditDate(e.target.value);setEditSlot("");}} type="date" style={{width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,color:C.text,fontSize:13}}/>
+            </div>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:11,color:C.textLight,marginBottom:6}}>Créneau</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
+                {ALL_SLOTS_ADMIN.map(s=>{
+                  const isTakenByOther=rdvs.some(x=>x.date===editDate&&x.slot===s&&x.statut!=="annulé"&&x.id!==r.id);
+                  const active=editSlot===s;
+                  return(<div key={s} onClick={()=>!isTakenByOther&&setEditSlot(s)} style={{padding:"7px 2px",textAlign:"center",borderRadius:6,border:`1px solid ${active?C.accent:isTakenByOther?C.borderLight:C.border}`,background:active?C.accent:isTakenByOther?C.surfaceAlt:C.surface,color:active?"#fff":isTakenByOther?C.borderLight:C.textMid,fontSize:11,cursor:isTakenByOther?"default":"pointer",textDecoration:isTakenByOther?"line-through":"none"}}>{s}</div>);
+                })}
+              </div>
             </div>
             <button onClick={()=>saveEdit(r)} disabled={editSaving} style={{width:"100%",padding:"8px",borderRadius:8,border:"none",background:`linear-gradient(135deg,#c9a0c0,#7a4878)`,color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>{editSaving?"Sauvegarde…":"Enregistrer"}</button>
           </div>
@@ -1102,6 +1269,11 @@ export default function App() {
   },[]);
   const handleBooked=(rdv)=>{setAllRdvs(p=>[...p,rdv]);setClientRdvs(p=>[...p,rdv]);setTab("mesrdvs");showToast("Rendez-vous confirmé !");};
   const handleLogout=async()=>{if(session?.token)await api.signOut(session.token);localStorage.removeItem("nlb_sess");setSession(null);setClientRdvs([]);showToast("Déconnecté·e");};
+  const handleRdvModified=(rdvId,changes)=>{
+    setClientRdvs(p=>p.map(r=>r.id===rdvId?{...r,...changes}:r));
+    setAllRdvs(p=>p.map(r=>r.id===rdvId?{...r,...changes}:r));
+    showToast("Rendez-vous déplacé !");
+  };
   const handleRdvCancelled=(rdvId)=>{setClientRdvs(p=>p.map(r=>r.id===rdvId?{...r,statut:"annulé"}:r));setAllRdvs(p=>p.map(r=>r.id===rdvId?{...r,statut:"annulé"}:r));showToast("Rendez-vous annulé");};
   const [supaLaserAccess,setSupaLaserAccess]=useState(false);
   useEffect(()=>{if(!session)return;api.get("profiles",`id=eq.${session.user.id}&select=laser_access`).then(d=>{if(Array.isArray(d)&&d[0])setSupaLaserAccess(d[0].laser_access||false);});},[session]);
@@ -1137,7 +1309,7 @@ export default function App() {
         {tab==="mesrdvs"&&(
           <div className="fu">
             <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,marginBottom:24}}>Mes rendez-vous</div>
-            {!session?<div style={{textAlign:"center",padding:"48px 0",color:C.textLight}}><div style={{fontSize:14,marginBottom:20}}>Connectez-vous pour voir vos rendez-vous.</div><PBtn onClick={()=>setTab("reserver")} style={{maxWidth:220,margin:"0 auto"}}>Réserver</PBtn></div>:<MesRdvsView rdvs={clientRdvs} loading={loadingRdvs} session={session} onRdvCancelled={handleRdvCancelled}/>}
+            {!session?<div style={{textAlign:"center",padding:"48px 0",color:C.textLight}}><div style={{fontSize:14,marginBottom:20}}>Connectez-vous pour voir vos rendez-vous.</div><PBtn onClick={()=>setTab("reserver")} style={{maxWidth:220,margin:"0 auto"}}>Réserver</PBtn></div>:<MesRdvsView rdvs={clientRdvs} loading={loadingRdvs} session={session} onRdvCancelled={handleRdvCancelled} onRdvModified={handleRdvModified} allRdvs={allRdvs}/>}
           </div>
         )}
         {tab==="compte"&&(
