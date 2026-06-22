@@ -113,6 +113,7 @@ const api = {
   async get(table, q="") { const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${q}`,{headers:this.authHeaders()}); return r.json(); },
   async post(table, body, token) { const h=token?this.ah(token):{...this.authHeaders(),"Prefer":"return=representation"}; const r=await fetch(`${SUPA_URL}/rest/v1/${table}`,{method:"POST",headers:h,body:JSON.stringify(body)}); return r.json(); },
   async patch(table, filter, body, token) { const h=token?{...this.ah(token),"Prefer":"return=representation"}:{...this.authHeaders(),"Prefer":"return=representation"}; const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`,{method:"PATCH",headers:h,body:JSON.stringify(body)}); return r.json(); },
+  async del(table, filter, token) { const h=token?this.ah(token):this.authHeaders(); const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`,{method:"DELETE",headers:h}); if(r.status===204) return {ok:true}; try { return await r.json(); } catch { return {ok:r.ok}; } },
   async signUp(email, password) { const r=await fetch(`${SUPA_URL}/auth/v1/signup`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({email,password})}); return r.json(); },
   async signIn(email, password) { const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({email,password})}); return r.json(); },
   async refreshToken(refresh_token) { const r=await fetch(`${SUPA_URL}/auth/v1/token?grant_type=refresh_token`,{method:"POST",headers:{"apikey":SUPA_PUB,"Content-Type":"application/json"},body:JSON.stringify({refresh_token})}); return r.json(); },
@@ -1026,6 +1027,8 @@ function AdminView({onExit}) {
   const [isUnlocked,setIsUnlocked]=useState(false);const [adminEmail,setAdminEmail]=useState("");const [adminPwd,setAdminPwd]=useState("");
   const [rdvs,setRdvs]=useState([]),[profs,setProfs]=useState([]);const [loading,setLoading]=useState(false),[tab,setTab]=useState("today");
   const [laserAccess,setLaserAccess]=useState(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
+  // Année affichée dans l'onglet CA mensuel (permet de naviguer entre les années)
+  const [caYear,setCaYear]=useState(()=>new Date().getFullYear());
   useEffect(()=>{const session=getAdminSession();if(session){setIsUnlocked(true);load();}},[]);
   const load=async()=>{
     setLoading(true);const[d,p]=await Promise.all([api.get("rdvs","select=*&order=date.asc,slot.asc"),api.get("profiles","select=*")]);
@@ -1039,10 +1042,14 @@ function AdminView({onExit}) {
     if(!res.ok){const errText=await res.text();alert("Erreur déblocage laser : "+errText);return;}
     const updated={...laserAccess,[uid]:newVal};setLaserAccess(updated);localStorage.setItem("laser_access",JSON.stringify(updated));
   };
+  // ── Annulation = suppression DÉFINITIVE du RDV (DELETE), plus de statut "annulé" qui restait affiché ──
   const cancel=async(id)=>{
-    if(!confirm("Annuler ce rendez-vous ?"))return;const rdvAnn=rdvs.find(r=>r.id===id);
-    await api.patch("rdvs",`id=eq.${id}`,{statut:"annulé"});setRdvs(p=>p.map(r=>r.id===id?{...r,statut:"annulé"}:r));
-    if(rdvAnn)await Promise.all([sendCancelEmail(rdvAnn),sendPush(`❌ Annulation − ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`,`${rdvAnn.prestation} · ${fmtLong(rdvAnn.date)} à ${rdvAnn.slot}`)]);
+    if(!confirm("Supprimer définitivement ce rendez-vous ? Cette action est irréversible."))return;
+    const rdvAnn=rdvs.find(r=>r.id===id);
+    const res=await api.del("rdvs",`id=eq.${id}`);
+    if(res&&res.error){alert("Erreur lors de la suppression : "+res.error.message||res.error);return;}
+    setRdvs(p=>p.filter(r=>r.id!==id));
+    if(rdvAnn)await Promise.all([sendCancelEmail(rdvAnn),sendPush(`❌ Suppression − ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`,`${rdvAnn.prestation} · ${fmtLong(rdvAnn.date)} à ${rdvAnn.slot}`)]);
   };
 
   // États édition — doivent être AVANT tout return conditionnel
@@ -1092,8 +1099,14 @@ function AdminView({onExit}) {
   const caMoisCourant=confirmes.filter(r=>{const d=parseD(r.date);return d.getFullYear()===currentYear&&d.getMonth()===currentMonth;}).reduce((s,r)=>s+(r.prix||0),0);
   const caAnneeCourante=confirmes.filter(r=>parseD(r.date).getFullYear()===currentYear).reduce((s,r)=>s+(r.prix||0),0);
   const nbRdvAVenir=confirmes.filter(r=>r.date>=todayStr()).length;
-  const caParMois=(()=>{const tab=Array(12).fill(0).map((_,i)=>({mois:i,ca:0,nb:0}));confirmes.forEach(r=>{const d=parseD(r.date);if(d.getFullYear()===currentYear){tab[d.getMonth()].ca+=(r.prix||0);tab[d.getMonth()].nb+=1;}else if(currentMonth===11&&d.getFullYear()===currentYear+1&&d.getMonth()===0){tab[0].ca+=(r.prix||0);tab[0].nb+=1;}});return tab;})();
+  // CA par mois pour une année donnée (caYear) — permet de voir TOUS les mois, et de naviguer d'année en année
+  const caParMoisAnnee=(annee)=>{const t=Array(12).fill(0).map((_,i)=>({mois:i,ca:0,nb:0}));confirmes.forEach(r=>{const d=parseD(r.date);if(d.getFullYear()===annee){t[d.getMonth()].ca+=(r.prix||0);t[d.getMonth()].nb+=1;}});return t;};
+  const caParMois=caParMoisAnnee(caYear);
   const caMaxMensuel=Math.max(...caParMois.map(m=>m.ca),1);
+  const caTotalAnneeAffichee=caParMois.reduce((s,m)=>s+m.ca,0);
+  const nbRdvAnneeAffichee=caParMois.reduce((s,m)=>s+m.nb,0);
+  // Années disponibles dans les données (pour limiter/orienter la navigation, sans bloquer si vide)
+  const anneesAvecData=[...new Set(confirmes.map(r=>parseD(r.date).getFullYear()))];
   const getPromoFor=(r)=>{if(r.cat_id!=="ongles"&&r.cat_id!=="spray")return null;if(r.statut!=="confirmé")return null;const sameClient=(x)=>r.user_id?x.user_id===r.user_id:x.client_tel===r.client_tel;const allSame=rdvs.filter(x=>x.cat_id===r.cat_id&&x.statut==="confirmé"&&sameClient(x)).sort((a,b)=>(a.date+a.slot).localeCompare(b.date+b.slot));const idx=allSame.findIndex(x=>x.id===r.id);if(idx===-1)return null;const nb=idx+1;const cycle=nb%10;if(cycle===0)return{remise:10,nb};if(cycle===5)return{remise:5,nb};return null;};
   const Row=({r,allRdvsAdmin})=>{
     const isEditing=editingId===r.id;
@@ -1144,7 +1157,7 @@ function AdminView({onExit}) {
         {r.statut!=="annulé"&&(<div style={{display:"flex",gap:8,marginTop:10}}>
           <a href={`tel:${r.client_tel}`} style={{fontSize:12,color:C.textMid,textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 12px"}}>📞 Appeler</a>
           <a href={smsUrl} style={{fontSize:12,color:C.textMid,textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 12px"}}>💬 Message</a>
-          <button onClick={()=>cancel(r.id)} style={{fontSize:12,color:"#c05050",background:"none",border:"1px solid #f0d0d0",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Annuler</button>
+          <button onClick={()=>cancel(r.id)} style={{fontSize:12,color:"#c05050",background:"none",border:"1px solid #f0d0d0",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Supprimer</button>
         </div>)}
         {r.statut==="annulé"&&<div style={{fontSize:11,color:"#c05050",marginTop:6}}>Annulé</div>}
       </div>
@@ -1177,10 +1190,17 @@ function AdminView({onExit}) {
       {!loading&&tab==="planning"&&(<PlanningAdmin/>)}
       {!loading&&tab==="ca"&&(
         <div>
-          <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:6}}>Chiffre d'affaires {currentYear}</div>
-          <div style={{fontSize:12,color:C.textLight,marginBottom:24}}>Détail mois par mois — uniquement les RDV confirmés</div>
-          <div style={{background:`linear-gradient(135deg,${C.accentLight},${C.surface})`,border:`1.5px solid ${C.accent}`,borderRadius:14,padding:"18px 20px",marginBottom:24,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.accent,fontWeight:600,marginBottom:4}}>Total {currentYear}</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.text,fontWeight:600}}>{caAnneeCourante} €</div></div><div style={{textAlign:"right"}}><div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight,marginBottom:4}}>RDV à venir</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.textMid,fontWeight:500}}>{nbRdvAVenir}</div></div></div>
-          {caParMois.filter(m=>m.mois===currentMonth||m.mois===(currentMonth+1)%12).map(m=>{const isCurrent=m.mois===currentMonth;const isNext=m.mois===(currentMonth+1)%12;const pct=(m.ca/caMaxMensuel)*100;return(<div key={m.mois} style={{marginBottom:14,padding:"14px 16px",background:isCurrent?C.accentLight:C.surface,border:`1px solid ${isCurrent?C.accent:C.border}`,borderRadius:12}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:14,fontWeight:isCurrent?700:500,color:isCurrent?C.accentDark:C.text}}>{MONTHS[m.mois]}</span>{isCurrent&&<span style={{fontSize:9,background:C.accent,color:"#fff",padding:"2px 7px",borderRadius:8,letterSpacing:.5,fontWeight:600}}>EN COURS</span>}{isNext&&<span style={{fontSize:9,background:C.border,color:C.textMid,padding:"2px 7px",borderRadius:8,letterSpacing:.5,fontWeight:600}}>À VENIR</span>}</div><div style={{textAlign:"right"}}><div style={{fontSize:16,fontWeight:700,color:isCurrent?C.accentDark:C.text}}>{m.ca} €</div><div style={{fontSize:11,color:C.textLight,marginTop:1}}>{m.nb} RDV</div></div></div>{m.ca>0&&<div style={{height:4,background:C.surfaceAlt,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:isCurrent?C.accent:C.accentDark,borderRadius:4,transition:"width .8s ease"}}/></div>}</div>);})}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+            <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text}}>Chiffre d'affaires {caYear}</div>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <button onClick={()=>setCaYear(y=>y-1)} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.textMid,width:30,height:30,fontSize:16,cursor:"pointer"}}>‹</button>
+              <button onClick={()=>setCaYear(currentYear)} style={{background:caYear===currentYear?C.accentLight:"none",border:`1px solid ${caYear===currentYear?C.accent:C.border}`,borderRadius:8,color:caYear===currentYear?C.accentDark:C.textLight,padding:"6px 10px",fontSize:11,cursor:"pointer"}}>Aujourd'hui</button>
+              <button onClick={()=>setCaYear(y=>y+1)} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:8,color:C.textMid,width:30,height:30,fontSize:16,cursor:"pointer"}}>›</button>
+            </div>
+          </div>
+          <div style={{fontSize:12,color:C.textLight,marginBottom:24}}>Détail des 12 mois — uniquement les RDV confirmés{anneesAvecData.length>0&&!anneesAvecData.includes(caYear)?" · aucune donnée cette année":""}</div>
+          <div style={{background:`linear-gradient(135deg,${C.accentLight},${C.surface})`,border:`1.5px solid ${C.accent}`,borderRadius:14,padding:"18px 20px",marginBottom:24,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.accent,fontWeight:600,marginBottom:4}}>Total {caYear}</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.text,fontWeight:600}}>{caTotalAnneeAffichee} €</div></div><div style={{textAlign:"right"}}><div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight,marginBottom:4}}>RDV {caYear}</div><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:30,color:C.textMid,fontWeight:500}}>{nbRdvAnneeAffichee}</div></div></div>
+          {caParMois.map(m=>{const isCurrent=caYear===currentYear&&m.mois===currentMonth;const pct=(m.ca/caMaxMensuel)*100;return(<div key={m.mois} style={{marginBottom:14,padding:"14px 16px",background:isCurrent?C.accentLight:C.surface,border:`1px solid ${isCurrent?C.accent:C.border}`,borderRadius:12}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:14,fontWeight:isCurrent?700:500,color:isCurrent?C.accentDark:C.text}}>{MONTHS[m.mois]}</span>{isCurrent&&<span style={{fontSize:9,background:C.accent,color:"#fff",padding:"2px 7px",borderRadius:8,letterSpacing:.5,fontWeight:600}}>EN COURS</span>}</div><div style={{textAlign:"right"}}><div style={{fontSize:16,fontWeight:700,color:isCurrent?C.accentDark:C.text}}>{m.ca} €</div><div style={{fontSize:11,color:C.textLight,marginTop:1}}>{m.nb} RDV</div></div></div>{m.ca>0&&<div style={{height:4,background:C.surfaceAlt,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:isCurrent?C.accent:C.accentDark,borderRadius:4,transition:"width .8s ease"}}/></div>}</div>);})}
         </div>
       )}
       {!loading&&tab==="laser"&&(
