@@ -470,10 +470,12 @@ function Calendar({selected,onSelect,bookedDates=[],unavailableDates=[],firstAva
           const s=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
           const isPast=s<todayS;const isUnavail=unavailableDates.includes(s);const isSel=s===selected;
           const isFirst=s===firstAvailable&&!isSel;const isDisabled=isPast||isUnavail;
+          const isBooked=bookedDates.includes(s);
           return (
             <div key={d} onClick={()=>!isDisabled&&onSelect(s)} style={{textAlign:"center",padding:"9px 2px",borderRadius:8,position:"relative",cursor:isDisabled?"default":"pointer",background:isSel?C.accent:isFirst?"#3a2848":"transparent",color:isSel?"#fff":isDisabled?C.borderLight:isFirst?C.accent:C.text,fontWeight:isSel?600:isFirst?600:400,fontSize:13,transition:"all .15s",opacity:isUnavail?.35:1}}>
               {d}
               {isFirst&&!isSel&&<div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",fontSize:6,color:C.accent}}>●</div>}
+              {isBooked&&!isFirst&&<div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:4,height:4,borderRadius:"50%",background:isSel?"#fff":"#e09050"}}/>}
             </div>
           );
         })}
@@ -972,7 +974,7 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
   );
 }
 
-function PlanningAdmin() {
+function PlanningAdmin({rdvs}) {
   const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const SEMAINE=["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const WEEKEND=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
@@ -981,21 +983,65 @@ function PlanningAdmin() {
   const loadBlocked=async(date)=>{const d=await api.get("blocked_slots",`date=eq.${date}&select=slot`);if(Array.isArray(d))setSupaBlocked(d.map(r=>r.slot));};
   useEffect(()=>{loadBlocked(selDate);},[selDate]);
   const isAutoBlocked=(slot)=>!autoAllowed.includes(slot);const isManualBlocked=(slot)=>supaBlocked.includes(slot);
-  const toggleSlot=async(slot)=>{if(isAutoBlocked(slot))return;setSaving(true);if(isManualBlocked(slot)){await fetch(`${SUPA_URL}/rest/v1/blocked_slots?date=eq.${selDate}&slot=eq.${encodeURIComponent(slot)}`,{method:"DELETE",headers:api.authHeaders()});setSupaBlocked(p=>p.filter(s=>s!==slot));}else{await api.post("blocked_slots",{date:selDate,slot});setSupaBlocked(p=>[...p,slot]);}setSaving(false);};
-  const blockFullDay=async()=>{setSaving(true);const toBlock=autoAllowed.filter(s=>!supaBlocked.includes(s));for(const slot of toBlock)await api.post("blocked_slots",{date:selDate,slot});setSupaBlocked(autoAllowed);setSaving(false);};
+  const toggleSlot=async(slot)=>{if(isAutoBlocked(slot)||rdvBySlot(slot))return;setSaving(true);if(isManualBlocked(slot)){await fetch(`${SUPA_URL}/rest/v1/blocked_slots?date=eq.${selDate}&slot=eq.${encodeURIComponent(slot)}`,{method:"DELETE",headers:api.authHeaders()});setSupaBlocked(p=>p.filter(s=>s!==slot));}else{await api.post("blocked_slots",{date:selDate,slot});setSupaBlocked(p=>[...p,slot]);}setSaving(false);};
+  const blockFullDay=async()=>{setSaving(true);const toBlock=autoAllowed.filter(s=>!supaBlocked.includes(s)&&!rdvBySlot(s));for(const slot of toBlock)await api.post("blocked_slots",{date:selDate,slot});setSupaBlocked(p=>[...new Set([...p,...toBlock])]);setSaving(false);};
   const unblockFullDay=async()=>{setSaving(true);await fetch(`${SUPA_URL}/rest/v1/blocked_slots?date=eq.${selDate}`,{method:"DELETE",headers:api.authHeaders()});setSupaBlocked([]);setSaving(false);};
+
+  // RDV confirmés du jour sélectionné, et leur étendue de créneaux (selon durée)
+  const rdvsJour=(rdvs||[]).filter(r=>r.date===selDate&&r.statut!=="annulé");
+  const svcColor=(catId)=>SERVICES.find(s=>s.id===catId)?.color||C.accent;
+  // Pour chaque créneau de la grille, retrouve le RDV qui l'occupe (le RDV peut durer plusieurs créneaux de 30min)
+  const rdvBySlot=(slot)=>{
+    const idx=ALL_SLOTS.indexOf(slot);
+    for(const r of rdvsJour){
+      const rIdx=ALL_SLOTS.indexOf(r.slot);if(rIdx===-1)continue;
+      const rEnd=rIdx+Math.ceil((r.duree||30)/30);
+      if(idx>=rIdx&&idx<rEnd)return {rdv:r,isStart:idx===rIdx};
+    }
+    return null;
+  };
+  // Jours du mois affiché qui ont au moins un RDV — pour le point indicateur sur le calendrier
+  const bookedDatesSet=[...new Set((rdvs||[]).filter(r=>r.statut!=="annulé").map(r=>r.date))];
+
   return (
     <div>
-      <div style={{marginBottom:20,padding:"12px 16px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,fontSize:12,color:C.textMid,lineHeight:1.8}}><span style={{color:C.accentDark,fontWeight:600}}>■</span> Ouvert &nbsp;·&nbsp;<span style={{color:"#f07070",fontWeight:600}}>■</span> Bloqué par toi &nbsp;·&nbsp;<span style={{color:C.textLight,fontWeight:600}}>■</span> Hors horaires</div>
-      <div style={{background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"20px 18px",marginBottom:20}}><Calendar selected={selDate} onSelect={setSelDate} bookedDates={[]}/></div>
-      <div style={{fontSize:13,fontWeight:600,color:C.textMid,marginBottom:12}}>{fmtLong(selDate)}</div>
+      <div style={{marginBottom:20,padding:"12px 16px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,fontSize:12,color:C.textMid,lineHeight:1.8}}>
+        <span style={{color:C.accentDark,fontWeight:600}}>■</span> Ouvert &nbsp;·&nbsp;
+        <span style={{color:"#e09050",fontWeight:600}}>■</span> RDV pris &nbsp;·&nbsp;
+        <span style={{color:"#f07070",fontWeight:600}}>■</span> Bloqué par toi &nbsp;·&nbsp;
+        <span style={{color:C.textLight,fontWeight:600}}>■</span> Hors horaires
+      </div>
+      <div style={{background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"20px 18px",marginBottom:20}}><Calendar selected={selDate} onSelect={setSelDate} bookedDates={bookedDatesSet}/></div>
+      <div style={{fontSize:13,fontWeight:600,color:C.textMid,marginBottom:4}}>{fmtLong(selDate)}</div>
+      <div style={{fontSize:12,color:C.textLight,marginBottom:16}}>{rdvsJour.length===0?"Aucun rendez-vous ce jour":`${rdvsJour.length} rendez-vous ce jour`}</div>
       <div style={{display:"flex",gap:8,marginBottom:16}}>
-        <button onClick={blockFullDay} disabled={saving} style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.textMid,fontSize:12,cursor:"pointer"}}>Bloquer toute la journée</button>
+        <button onClick={blockFullDay} disabled={saving} style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.textMid,fontSize:12,cursor:"pointer"}}>Bloquer les créneaux libres</button>
         <button onClick={unblockFullDay} disabled={saving} style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.textMid,fontSize:12,cursor:"pointer"}}>Tout débloquer</button>
       </div>
       {saving&&<div style={{textAlign:"center",fontSize:12,color:C.textLight,marginBottom:12}}>Sauvegarde…</div>}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
-        {ALL_SLOTS.map(s=>{const autoB=isAutoBlocked(s),manualB=isManualBlocked(s);return(<div key={s} onClick={()=>toggleSlot(s)} style={{padding:"11px 4px",textAlign:"center",borderRadius:10,border:`1.5px solid ${manualB?"#c05050":autoB?C.border:C.accent}`,background:manualB?"#2a1010":autoB?C.surfaceAlt:C.accentLight,color:manualB?"#f07070":autoB?C.textLight:C.accentDark,fontSize:13,cursor:autoB?"default":"pointer",transition:"all .15s",fontWeight:(!autoB&&!manualB)?600:400}}>{s}</div>);})}
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {ALL_SLOTS.map(s=>{
+          const autoB=isAutoBlocked(s),manualB=isManualBlocked(s);const occ=rdvBySlot(s);
+          if(occ){
+            // Créneau occupé par un RDV — n'affiche le détail (nom, prestation) qu'au créneau de départ pour éviter la répétition
+            if(!occ.isStart)return null;
+            const r=occ.rdv;
+            return (
+              <div key={s} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,border:`1.5px solid #4a3218`,background:"#2a1e10"}}>
+                <div style={{width:3,alignSelf:"stretch",borderRadius:2,background:svcColor(r.cat_id),flexShrink:0,minHeight:20}}/>
+                <div style={{minWidth:44,fontSize:12,fontWeight:700,color:"#e09050"}}>{s}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,fontWeight:600,color:C.text}}>{r.client_prenom} {r.client_nom}</div>
+                  <div style={{fontSize:11,color:C.textMid,marginTop:1}}>{r.prestation} · {r.duree}min</div>
+                </div>
+                <div style={{fontSize:12,fontWeight:700,color:"#e09050"}}>{r.prix}€</div>
+              </div>
+            );
+          }
+          return(
+            <div key={s} onClick={()=>toggleSlot(s)} style={{padding:"10px 12px",textAlign:"center",borderRadius:10,border:`1.5px solid ${manualB?"#c05050":autoB?C.border:C.accent}`,background:manualB?"#2a1010":autoB?C.surfaceAlt:C.accentLight,color:manualB?"#f07070":autoB?C.textLight:C.accentDark,fontSize:13,cursor:autoB?"default":"pointer",transition:"all .15s",fontWeight:(!autoB&&!manualB)?600:400}}>{s}</div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1058,6 +1104,21 @@ function AdminView({onExit}) {
   // Année affichée dans l'onglet CA mensuel (permet de naviguer entre les années)
   const [caYear,setCaYear]=useState(()=>new Date().getFullYear());
   useEffect(()=>{const session=getAdminSession();if(session){setIsUnlocked(true);load();}},[]);
+  // Rafraîchit le token admin avant expiration — sans ça, les actions (suppression, modif) échouent silencieusement après ~1h
+  useEffect(()=>{
+    const interval=setInterval(async()=>{
+      const session=getAdminSession();
+      if(!session||!session.refresh_token)return;
+      try{
+        const res=await api.refreshToken(session.refresh_token);
+        if(res.access_token){
+          const updated={...session,access_token:res.access_token,refresh_token:res.refresh_token||session.refresh_token,expires_at:res.expires_at};
+          localStorage.setItem(AUTH_STORAGE_KEY,JSON.stringify(updated));
+        }
+      }catch(e){console.log("Admin refresh failed:",e);}
+    },20*60*1000);
+    return()=>clearInterval(interval);
+  },[]);
   const load=async()=>{
     setLoading(true);const[d,p]=await Promise.all([api.get("rdvs","select=*&order=date.asc,slot.asc"),api.get("profiles","select=*")]);
     if(Array.isArray(d))setRdvs(d);
@@ -1074,8 +1135,14 @@ function AdminView({onExit}) {
   const cancel=async(id)=>{
     if(!confirm("Supprimer définitivement ce rendez-vous ? Cette action est irréversible."))return;
     const rdvAnn=rdvs.find(r=>r.id===id);
-    const res=await api.del("rdvs",`id=eq.${id}`);
-    if(res&&res.error){alert("Erreur lors de la suppression : "+res.error.message||res.error);return;}
+    const session=getAdminSession();
+    if(!session){alert("Session admin expirée. Reconnecte-toi puis réessaie.");setIsUnlocked(false);return;}
+    const res=await api.del("rdvs",`id=eq.${id}`,session.access_token);
+    if(res&&res.ok===false){alert("La suppression a échoué (session probablement expirée). Reconnecte-toi puis réessaie.");setIsUnlocked(false);return;}
+    if(res&&res.error){alert("Erreur lors de la suppression : "+(res.error.message||res.error));return;}
+    // Vérifie que la ligne a bien disparu côté Supabase avant de mettre à jour l'affichage
+    const check=await api.get("rdvs",`id=eq.${id}&select=id`);
+    if(Array.isArray(check)&&check.length>0){alert("Le rendez-vous n'a pas pu être supprimé (droits insuffisants). Reconnecte-toi puis réessaie.");return;}
     setRdvs(p=>p.filter(r=>r.id!==id));
     if(rdvAnn)await Promise.all([sendCancelEmail(rdvAnn),sendPush(`❌ Suppression − ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`,`${rdvAnn.prestation} · ${fmtLong(rdvAnn.date)} à ${rdvAnn.slot}`),notifyMakeRdvCancelled(rdvAnn)]);
   };
@@ -1217,7 +1284,7 @@ function AdminView({onExit}) {
       {!loading&&tab==="upcoming"&&(<div>{upcoming.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous à venir.</div>:Object.entries(groupByDate(upcoming)).map(([d,list])=>(<div key={d} style={{marginBottom:28}}><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>{fmtLong(d)}</div>{list.map(r=><Row key={r.id} r={r} allRdvsAdmin={rdvs}/>)}</div>))}</div>)}
       {!loading&&tab==="all"&&(<div>{rdvs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous.</div>:Object.entries(groupByDate([...rdvs].sort((a,b)=>b.date.localeCompare(a.date)))).map(([d,list])=>(<div key={d} style={{marginBottom:28}}><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>{fmtLong(d)}</div>{list.map(r=><Row key={r.id} r={r} allRdvsAdmin={rdvs}/>)}</div>))}</div>)}
       {!loading&&tab==="create"&&(<AdminCreateRdvView allRdvs={rdvs} profs={profs} onCreated={(saved)=>{setRdvs(p=>[...p,saved]);setTab("today");}}/>)}
-      {!loading&&tab==="planning"&&(<PlanningAdmin/>)}
+      {!loading&&tab==="planning"&&(<PlanningAdmin rdvs={rdvs}/>)}
       {!loading&&tab==="ca"&&(
         <div>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
