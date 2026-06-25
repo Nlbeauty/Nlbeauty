@@ -19,6 +19,7 @@ const adminLogin = async (email, password) => {
 
 const adminLogout = () => { localStorage.removeItem(AUTH_STORAGE_KEY); };
 
+// Lecture synchrone simple (utilisée pour l'affichage / vérif rapide, ne rafraîchit pas)
 const getAdminSession = () => {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
@@ -26,6 +27,28 @@ const getAdminSession = () => {
     const session = JSON.parse(raw);
     if (session.expires_at && session.expires_at * 1000 < Date.now()) { localStorage.removeItem(AUTH_STORAGE_KEY); return null; }
     return session;
+  } catch { return null; }
+};
+
+// Version robuste : si le token est expiré, tente un refresh avant d'abandonner.
+// À utiliser pour toute action critique (suppression, modification) plutôt que getAdminSession().
+const getValidAdminSession = async () => {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const session = JSON.parse(raw);
+    const isExpired = session.expires_at && session.expires_at * 1000 < Date.now();
+    if (!isExpired) return session;
+    if (!session.refresh_token) { localStorage.removeItem(AUTH_STORAGE_KEY); return null; }
+    const res = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST",
+      headers: { "apikey": SUPA_PUB, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: session.refresh_token }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.access_token) { localStorage.removeItem(AUTH_STORAGE_KEY); return null; }
+    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(data));
+    return data;
   } catch { return null; }
 };
 
@@ -1137,7 +1160,7 @@ function AdminView({onExit}) {
   const cancel=async(id)=>{
     if(!confirm("Supprimer définitivement ce rendez-vous ? Cette action est irréversible."))return;
     const rdvAnn=rdvs.find(r=>r.id===id);
-    const session=getAdminSession();
+    const session=await getValidAdminSession();
     if(!session){alert("Session admin expirée. Reconnecte-toi puis réessaie.");setIsUnlocked(false);return;}
     const res=await api.del("rdvs",`id=eq.${id}`,session.access_token);
     if(res&&res.ok===false){alert("La suppression a échoué (session probablement expirée). Reconnecte-toi puis réessaie.");setIsUnlocked(false);return;}
@@ -1166,7 +1189,10 @@ function AdminView({onExit}) {
     if(editDate&&editDate!==r.date) body.date=editDate;
     if(editSlot&&editSlot!==r.slot) body.slot=editSlot;
     if(Object.keys(body).length>0){
-      await api.patch("rdvs",`id=eq.${r.id}`,body);
+      const session=await getValidAdminSession();
+      if(!session){alert("Session admin expirée. Reconnecte-toi puis réessaie.");setIsUnlocked(false);setEditSaving(false);return;}
+      const patchRes=await api.patch("rdvs",`id=eq.${r.id}`,body,session.access_token);
+      if(patchRes&&patchRes.error){alert("Erreur lors de la modification : "+(patchRes.error.message||patchRes.error));setEditSaving(false);return;}
       setRdvs(prev=>prev.map(x=>x.id===r.id?{...x,...body}:x));
       if(body.date||body.slot){
         const nd=body.date||r.date;const ns=body.slot||r.slot;
