@@ -448,7 +448,7 @@ function SprayTanConseilsPage({ onClose }) {
   );
 }
 
-function Calendar({selected,onSelect,bookedDates=[],unavailableDates=[],firstAvailable=null}) {
+function Calendar({selected,onSelect,bookedDates=[],unavailableDates=[],firstAvailable=null,allowPast=false}) {
   const t=new Date();
   const [yr,setYr]=useState(()=>{if(firstAvailable){const [y]=firstAvailable.split("-");return +y;}return t.getFullYear();});
   const [mo,setMo]=useState(()=>{if(firstAvailable){const [,m]=firstAvailable.split("-");return +m-1;}return t.getMonth();});
@@ -469,10 +469,10 @@ function Calendar({selected,onSelect,bookedDates=[],unavailableDates=[],firstAva
           const d=i+1;
           const s=`${yr}-${String(mo+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
           const isPast=s<todayS;const isUnavail=unavailableDates.includes(s);const isSel=s===selected;
-          const isFirst=s===firstAvailable&&!isSel;const isDisabled=isPast||isUnavail;
-          const isBooked=bookedDates.includes(s);
+          const isFirst=s===firstAvailable&&!isSel;const isDisabled=allowPast?isUnavail:(isPast||isUnavail);
+          const isBooked=bookedDates.includes(s);const isTodayDate=s===todayS;
           return (
-            <div key={d} onClick={()=>!isDisabled&&onSelect(s)} style={{textAlign:"center",padding:"9px 2px",borderRadius:8,position:"relative",cursor:isDisabled?"default":"pointer",background:isSel?C.accent:isFirst?"#3a2848":"transparent",color:isSel?"#fff":isDisabled?C.borderLight:isFirst?C.accent:C.text,fontWeight:isSel?600:isFirst?600:400,fontSize:13,transition:"all .15s",opacity:isUnavail?.35:1}}>
+            <div key={d} onClick={()=>!isDisabled&&onSelect(s)} style={{textAlign:"center",padding:"9px 2px",borderRadius:8,position:"relative",cursor:isDisabled?"default":"pointer",background:isSel?C.accent:isFirst?"#3a2848":"transparent",color:isSel?"#fff":isDisabled?C.borderLight:isPast?C.textLight:isFirst?C.accent:C.text,fontWeight:isSel?600:isFirst||isTodayDate?600:400,fontSize:13,transition:"all .15s",opacity:isUnavail?.35:isPast&&allowPast?.6:1,border:isTodayDate&&!isSel?`1px solid ${C.accent}`:"none"}}>
               {d}
               {isFirst&&!isSel&&<div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",fontSize:6,color:C.accent}}>●</div>}
               {isBooked&&!isFirst&&<div style={{position:"absolute",bottom:2,left:"50%",transform:"translateX(-50%)",width:4,height:4,borderRadius:"50%",background:isSel?"#fff":"#e09050"}}/>}
@@ -990,6 +990,7 @@ function PlanningAdmin({rdvs}) {
   // RDV confirmés du jour sélectionné, et leur étendue de créneaux (selon durée)
   const rdvsJour=(rdvs||[]).filter(r=>r.date===selDate&&r.statut!=="annulé");
   const svcColor=(catId)=>SERVICES.find(s=>s.id===catId)?.color||C.accent;
+  const isPastDay=selDate<todayStr();
   // Pour chaque créneau de la grille, retrouve le RDV qui l'occupe (le RDV peut durer plusieurs créneaux de 30min)
   const rdvBySlot=(slot)=>{
     const idx=ALL_SLOTS.indexOf(slot);
@@ -1011,13 +1012,13 @@ function PlanningAdmin({rdvs}) {
         <span style={{color:"#f07070",fontWeight:600}}>■</span> Bloqué par toi &nbsp;·&nbsp;
         <span style={{color:C.textLight,fontWeight:600}}>■</span> Hors horaires
       </div>
-      <div style={{background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"20px 18px",marginBottom:20}}><Calendar selected={selDate} onSelect={setSelDate} bookedDates={bookedDatesSet}/></div>
-      <div style={{fontSize:13,fontWeight:600,color:C.textMid,marginBottom:4}}>{fmtLong(selDate)}</div>
+      <div style={{background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"20px 18px",marginBottom:20}}><Calendar selected={selDate} onSelect={setSelDate} bookedDates={bookedDatesSet} allowPast/></div>
+      <div style={{fontSize:13,fontWeight:600,color:C.textMid,marginBottom:4}}>{fmtLong(selDate)}{isPastDay&&<span style={{fontSize:11,color:C.textLight,fontWeight:400,marginLeft:8}}>(jour passé — historique)</span>}</div>
       <div style={{fontSize:12,color:C.textLight,marginBottom:16}}>{rdvsJour.length===0?"Aucun rendez-vous ce jour":`${rdvsJour.length} rendez-vous ce jour`}</div>
-      <div style={{display:"flex",gap:8,marginBottom:16}}>
+      {!isPastDay&&(<div style={{display:"flex",gap:8,marginBottom:16}}>
         <button onClick={blockFullDay} disabled={saving} style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.textMid,fontSize:12,cursor:"pointer"}}>Bloquer les créneaux libres</button>
         <button onClick={unblockFullDay} disabled={saving} style={{flex:1,padding:"10px",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface,color:C.textMid,fontSize:12,cursor:"pointer"}}>Tout débloquer</button>
-      </div>
+      </div>)}
       {saving&&<div style={{textAlign:"center",fontSize:12,color:C.textLight,marginBottom:12}}>Sauvegarde…</div>}
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
         {ALL_SLOTS.map(s=>{
@@ -1027,7 +1028,7 @@ function PlanningAdmin({rdvs}) {
             if(!occ.isStart)return null;
             const r=occ.rdv;
             return (
-              <div key={s} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,border:`1.5px solid #4a3218`,background:"#2a1e10"}}>
+              <div key={s} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,border:`1.5px solid #4a3218`,background:"#2a1e10",opacity:isPastDay?.7:1}}>
                 <div style={{width:3,alignSelf:"stretch",borderRadius:2,background:svcColor(r.cat_id),flexShrink:0,minHeight:20}}/>
                 <div style={{minWidth:44,fontSize:12,fontWeight:700,color:"#e09050"}}>{s}</div>
                 <div style={{flex:1,minWidth:0}}>
@@ -1038,6 +1039,7 @@ function PlanningAdmin({rdvs}) {
               </div>
             );
           }
+          if(isPastDay)return null;
           return(
             <div key={s} onClick={()=>toggleSlot(s)} style={{padding:"10px 12px",textAlign:"center",borderRadius:10,border:`1.5px solid ${manualB?"#c05050":autoB?C.border:C.accent}`,background:manualB?"#2a1010":autoB?C.surfaceAlt:C.accentLight,color:manualB?"#f07070":autoB?C.textLight:C.accentDark,fontSize:13,cursor:autoB?"default":"pointer",transition:"all .15s",fontWeight:(!autoB&&!manualB)?600:400}}>{s}</div>
           );
