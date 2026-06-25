@@ -105,9 +105,11 @@ const sendCancelEmail = async (rdv) => {
 const NTFY_TOPIC = "neylika-rdv-q8mk3xfp7vwn";
 const sendPush = async (title, message) => { try { await fetch(`https://ntfy.sh/${NTFY_TOPIC}`, { method: "POST", body: `${title}\n${message}`, mode: "no-cors", keepalive: true }); } catch(e) { console.log("Push error:", e); } };
 
-// ─── MAKE WEBHOOKS — synchronisation Google Agenda ───────────────────────────
-// Déclenchés à chaque création / annulation / déplacement de RDV.
-// Le scénario Make attend un payload au format { record: {...} } (comme un trigger Supabase).
+// ─── MAKE WEBHOOKS — gérés par des triggers Postgres pour création/annulation/suppression ──
+// (table rdvs : triggers make-rdvs / trg_rdv_annule / trg_rdv_supprime)
+// Seul le DÉPLACEMENT (changement de date/slot sans changement de statut) n'est couvert par
+// aucun trigger Postgres : on appelle donc Make manuellement dans ce cas précis uniquement,
+// pour supprimer l'ancien événement Google et recréer le nouveau au bon horaire.
 const MAKE_HOOK_RDV_CREATED = "https://hook.eu1.make.com/ts1aq7d3ovff4g2sf4lxexdms1ssdxle";
 const MAKE_HOOK_RDV_CANCELLED = "https://hook.eu1.make.com/hrrij492yn2c5wnhbkb7yd5xsvwhcucx";
 
@@ -702,7 +704,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
       if(res&&res.code){setConfirmError(res.code==="23505"?"Vous avez déjà un rendez-vous à cet horaire. Choisissez un autre créneau.":"Erreur : "+(res.message||"impossible de créer le rendez-vous."));setConfirming(false);return;}
       const saved=Array.isArray(res)?res[0]:res;
       if(!saved||!saved.id){setConfirmError("Erreur : le rendez-vous n'a pas pu être enregistré. Réessayez ou contactez-nous.");setConfirming(false);return;}
-      await Promise.all([sendEmails(saved,sess.user.email),sendPush(`${saved.client_prenom} ${saved.client_nom}`,`${saved.prestation} · ${fmtLong(saved.date)} à ${saved.slot}`),notifyMakeRdvCreated(saved)]);
+      await Promise.all([sendEmails(saved,sess.user.email),sendPush(`${saved.client_prenom} ${saved.client_nom}`,`${saved.prestation} · ${fmtLong(saved.date)} à ${saved.slot}`)]);
       const promoFid=checkFidelitePromo(allRdvs,saved);if(promoFid)await sendPush(`🎁 FIDÉLITÉ — ${saved.client_prenom} ${saved.client_nom}`,promoFid.msg);
       setDone(saved);onBooked(saved);sc(doneRef);
     }catch(e){console.log("Erreur réservation:",e);setConfirmError("Erreur réseau. Vérifiez votre connexion et réessayez.");}
@@ -956,7 +958,7 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
       const token=session?.token;if(!token){setCancelError("Session expirée. Veuillez vous reconnecter.");setCancelling(false);return;}
       const patchRes=await api.patch("rdvs",`id=eq.${r.id}`,{statut:"annulé"},token);const updated=Array.isArray(patchRes)?patchRes[0]:patchRes;
       if(!updated||updated.error||(updated.statut&&updated.statut!=="annulé")){setCancelError("Impossible d'annuler ce rendez-vous. Contactez-nous.");setCancelling(false);return;}
-      await Promise.all([sendCancelEmail(r),sendPush(`❌ Annulation − ${r.client_prenom} ${r.client_nom}`,`${r.prestation} · ${fmtLong(r.date)} à ${r.slot}`),notifyMakeRdvCancelled(r)]);
+      await Promise.all([sendCancelEmail(r),sendPush(`❌ Annulation − ${r.client_prenom} ${r.client_nom}`,`${r.prestation} · ${fmtLong(r.date)} à ${r.slot}`)]);
       if(onRdvCancelled)onRdvCancelled(r.id);
     }catch(e){console.log("Erreur annulation:",e);setCancelError("Erreur réseau. Réessayez.");}
     setCancelling(false);
@@ -1095,7 +1097,7 @@ function AdminCreateRdvView({allRdvs,profs,onCreated}) {
       const res=await api.post("rdvs",rdv);
       if(res&&res.code){setMsg({type:"err",text:res.code==="23505"?"Cette cliente a déjà un RDV à cet horaire.":"Erreur : "+(res.message||"inconnue")});setSaving(false);return;}
       const saved=Array.isArray(res)?res[0]:res;if(!saved||saved.error){setMsg({type:"err",text:"Erreur insertion : "+(saved?.message||"inconnue")});setSaving(false);return;}
-      const tasks=[];if(client_email)tasks.push(sendEmails(rdv,client_email));tasks.push(sendPush(`${client_prenom} ${client_nom}`,`${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`));tasks.push(notifyMakeRdvCreated(saved));await Promise.all(tasks);
+      const tasks=[];if(client_email)tasks.push(sendEmails(rdv,client_email));tasks.push(sendPush(`${client_prenom} ${client_nom}`,`${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`));await Promise.all(tasks);
       const promoFidAdmin=checkFidelitePromo(allRdvs,rdv);if(promoFidAdmin)await sendPush(`🎁 FIDÉLITÉ — ${client_prenom} ${client_nom}`,promoFidAdmin.msg);
       setMsg({type:"ok",text:`RDV créé pour ${client_prenom} ${client_nom} le ${fmtLong(date)} à ${slot}${client_email?" — email envoyé":""}.`});if(onCreated)onCreated(saved);
       setSlot("");setPrestaId("");setSubId("");setSvcId("");setSelectedClientId("");setNewPrenom("");setNewNom("");setNewTel("");setNewEmail("");
@@ -1164,12 +1166,12 @@ function AdminView({onExit}) {
     if(!session){alert("Session admin expirée. Reconnecte-toi puis réessaie.");setIsUnlocked(false);return;}
     const res=await api.del("rdvs",`id=eq.${id}`,session.access_token);
     if(res&&res.ok===false){alert("La suppression a échoué (session probablement expirée). Reconnecte-toi puis réessaie.");setIsUnlocked(false);return;}
-    if(res&&res.error){alert("Erreur lors de la suppression : "+(res.error.message||res.error));return;}
-    // Vérifie que la ligne a bien disparu côté Supabase avant de mettre à jour l'affichage
-    const check=await api.get("rdvs",`id=eq.${id}&select=id`);
-    if(Array.isArray(check)&&check.length>0){alert("Le rendez-vous n'a pas pu être supprimé (droits insuffisants). Reconnecte-toi puis réessaie.");return;}
+    if(res&&!Array.isArray(res)&&res.error){alert("Erreur lors de la suppression : "+(res.error.message||res.error));return;}
+    // Supabase répond avec un tableau contenant la ligne supprimée grâce à Prefer:return=representation.
+    // Un tableau vide veut dire que rien n'a été supprimé (RLS a silencieusement bloqué, sans erreur HTTP).
+    if(Array.isArray(res)&&res.length===0){alert("Le rendez-vous n'a pas pu être supprimé (droits insuffisants). Reconnecte-toi puis réessaie.");setIsUnlocked(false);return;}
     setRdvs(p=>p.filter(r=>r.id!==id));
-    if(rdvAnn)await Promise.all([sendCancelEmail(rdvAnn),sendPush(`❌ Suppression − ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`,`${rdvAnn.prestation} · ${fmtLong(rdvAnn.date)} à ${rdvAnn.slot}`),notifyMakeRdvCancelled(rdvAnn)]);
+    if(rdvAnn)await Promise.all([sendCancelEmail(rdvAnn),sendPush(`❌ Suppression − ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`,`${rdvAnn.prestation} · ${fmtLong(rdvAnn.date)} à ${rdvAnn.slot}`)]);
   };
 
   // États édition — doivent être AVANT tout return conditionnel
