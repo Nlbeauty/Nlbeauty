@@ -108,8 +108,8 @@ const sendPush = async (title, message) => { try { await fetch(`https://ntfy.sh/
 // ─── MAKE WEBHOOKS — synchronisation Google Agenda ───────────────────────────
 // Déclenchés à chaque création / annulation / déplacement de RDV.
 // Le scénario Make attend un payload au format { record: {...} } (comme un trigger Supabase).
-const MAKE_HOOK_RDV_CREATED = "https://hook.eu1.make.com/g2fcao6k9b3brqxnf15halq7t7l3z8ag";
-const MAKE_HOOK_RDV_CANCELLED = "https://hook.eu1.make.com/iobnlwupfg5bxokquu80a8vk7lxdcikx";
+const MAKE_HOOK_RDV_CREATED = "https://hook.eu1.make.com/ts1aq7d3ovff4g2sf4lxexdms1ssdxle";
+const MAKE_HOOK_RDV_CANCELLED = "https://hook.eu1.make.com/hrrij492yn2c5wnhbkb7yd5xsvwhcucx";
 
 const notifyMakeRdvCreated = async (rdv) => {
   try {
