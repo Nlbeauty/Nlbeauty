@@ -978,10 +978,19 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
             {r.statut==="annulé"&&<div style={{fontSize:12,color:"#c05050",marginTop:6}}>Annulé</div>}
           </div>
           {isUpcoming&&<AdresseBlock/>}
-          {isUpcoming&&canModify(r)&&(
-            <button onClick={()=>{setModifyingRdv(isModifying?null:r);setNewDate("");setNewSlot("");setModifyError("");}} style={{marginTop:14,width:"100%",fontSize:12,color:isModifying?C.textLight:C.accentDark,background:"none",border:`1px solid ${isModifying?C.border:C.accent}`,borderRadius:8,padding:"9px",cursor:"pointer"}}>
-              {isModifying?"✕ Fermer":"📅 Modifier / Déplacer"}
-            </button>
+          {isUpcoming&&(canModify(r)||canCancel(r))&&(
+            <div style={{marginTop:14,display:"flex",gap:8}}>
+              {canModify(r)&&(
+                <button onClick={()=>{setModifyingRdv(isModifying?null:r);setNewDate("");setNewSlot("");setModifyError("");}} style={{flex:1,fontSize:12,color:isModifying?C.textLight:C.accentDark,background:"none",border:`1px solid ${isModifying?C.border:C.accent}`,borderRadius:8,padding:"9px",cursor:"pointer"}}>
+                  {isModifying?"✕ Fermer":"📅 Modifier / Déplacer"}
+                </button>
+              )}
+              {canCancel(r)&&(
+                <button onClick={()=>handleCancel(r)} disabled={cancelling} style={{flex:1,fontSize:12,color:"#c05050",background:"none",border:"1px solid #5a2020",borderRadius:8,padding:"9px",cursor:cancelling?"default":"pointer"}}>
+                  {cancelling?"Annulation…":"✕ Annuler"}
+                </button>
+              )}
+            </div>
           )}
           {isModifying&&<ModifyPicker rdv={r} newDate={newDate} setNewDate={setNewDate} newSlot={newSlot} setNewSlot={setNewSlot} modifyDone={modifyDone} modifyError={modifyError} modifying={modifying} handleModify={handleModify} onClose={()=>{setModifyingRdv(null);setNewDate("");setNewSlot("");setModifyError("");}} getAvailSlotsModify={getAvailSlotsModify}/>}
         </div>
