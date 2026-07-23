@@ -723,7 +723,8 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
       if(res&&res.code){setConfirmError(res.code==="23505"?"Vous avez déjà un rendez-vous à cet horaire. Choisissez un autre créneau.":"Erreur : "+(res.message||"impossible de créer le rendez-vous."));setConfirming(false);return;}
       const saved=Array.isArray(res)?res[0]:res;
       if(!saved||!saved.id){setConfirmError("Erreur : le rendez-vous n'a pas pu être enregistré. Réessayez ou contactez-nous.");setConfirming(false);return;}
-      await Promise.all([sendEmails(saved,sess.user.email),sendPush(`${saved.client_prenom} ${saved.client_nom}`,`${saved.prestation} · ${fmtLong(saved.date)} à ${saved.slot}`)]);
+      // Notification push retirée : Make l'envoie déjà via le trigger Postgres "make-rdvs".
+      await sendEmails(saved,sess.user.email);
       const promoFid=checkFidelitePromo(allRdvs,saved);if(promoFid)await sendPush(`🎁 FIDÉLITÉ — ${saved.client_prenom} ${saved.client_nom}`,promoFid.msg);
       setDone(saved);onBooked(saved);sc(doneRef);
     }catch(e){console.log("Erreur réservation:",e);setConfirmError("Erreur réseau. Vérifiez votre connexion et réessayez.");}
@@ -957,9 +958,10 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
       const updated=Array.isArray(res)?res[0]:res;
       if(!updated||updated.error){setModifyError("Impossible de modifier. Contactez-nous.");setModifying(false);return;}
       const rdvUpdated={...modifyingRdv,date:newDate,slot:newSlot};
+      // Notification push retirée : les deux webhooks Make ci-dessous déclenchent déjà
+      // une notif "annulation" puis une notif "nouveau RDV" au nouvel horaire.
       await Promise.all([
         sendEmails(rdvUpdated,session.user.email),
-        sendPush(`✏️ Modification − ${modifyingRdv.client_prenom} ${modifyingRdv.client_nom}`,`${modifyingRdv.prestation} · ${fmtLong(newDate)} à ${newSlot} (était ${fmtLong(modifyingRdv.date)} à ${modifyingRdv.slot})`),
         notifyMakeRdvCancelled(modifyingRdv),
         notifyMakeRdvCreated(rdvUpdated),
       ]);
@@ -977,7 +979,8 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
       const token=session?.token;if(!token){setCancelError("Session expirée. Veuillez vous reconnecter.");setCancelling(false);return;}
       const patchRes=await api.patch("rdvs",`id=eq.${r.id}`,{statut:"annulé"},token);const updated=Array.isArray(patchRes)?patchRes[0]:patchRes;
       if(!updated||updated.error||(updated.statut&&updated.statut!=="annulé")){setCancelError("Impossible d'annuler ce rendez-vous. Contactez-nous.");setCancelling(false);return;}
-      await Promise.all([sendCancelEmail(r),sendPush(`❌ Annulation − ${r.client_prenom} ${r.client_nom}`,`${r.prestation} · ${fmtLong(r.date)} à ${r.slot}`)]);
+      // Notification push retirée : Make l'envoie déjà via le trigger Postgres "trg_rdv_annule".
+      await sendCancelEmail(r);
       if(onRdvCancelled)onRdvCancelled(r.id);
     }catch(e){console.log("Erreur annulation:",e);setCancelError("Erreur réseau. Réessayez.");}
     setCancelling(false);
@@ -1128,7 +1131,8 @@ function AdminCreateRdvView({allRdvs,profs,onCreated}) {
       const res=await api.post("rdvs",rdv);
       if(res&&res.code){setMsg({type:"err",text:res.code==="23505"?"Cette cliente a déjà un RDV à cet horaire.":"Erreur : "+(res.message||"inconnue")});setSaving(false);return;}
       const saved=Array.isArray(res)?res[0]:res;if(!saved||saved.error){setMsg({type:"err",text:"Erreur insertion : "+(saved?.message||"inconnue")});setSaving(false);return;}
-      const tasks=[];if(client_email)tasks.push(sendEmails(rdv,client_email));tasks.push(sendPush(`${client_prenom} ${client_nom}`,`${rdv.prestation} · ${fmtLong(rdv.date)} à ${rdv.slot}`));await Promise.all(tasks);
+      // Notification push retirée : Make l'envoie déjà via le trigger Postgres "make-rdvs".
+      if(client_email)await sendEmails(rdv,client_email);
       const promoFidAdmin=checkFidelitePromo(allRdvs,rdv);if(promoFidAdmin)await sendPush(`🎁 FIDÉLITÉ — ${client_prenom} ${client_nom}`,promoFidAdmin.msg);
       setMsg({type:"ok",text:`RDV créé pour ${client_prenom} ${client_nom} le ${fmtLong(date)} à ${slot}${client_email?" — email envoyé":""}.`});if(onCreated)onCreated(saved);
       setSlot("");setPrestaId("");setSubId("");setSvcId("");setSelectedClientId("");setNewPrenom("");setNewNom("");setNewTel("");setNewEmail("");
@@ -1270,7 +1274,8 @@ function AdminView({onExit}) {
     // Un tableau vide veut dire que rien n'a été supprimé (RLS a silencieusement bloqué, sans erreur HTTP).
     if(Array.isArray(res)&&res.length===0){alert("Le rendez-vous n'a pas pu être supprimé (droits insuffisants). Reconnecte-toi puis réessaie.");setIsUnlocked(false);return;}
     setRdvs(p=>p.filter(r=>r.id!==id));
-    if(rdvAnn)await Promise.all([sendCancelEmail(rdvAnn),sendPush(`❌ Suppression − ${rdvAnn.client_prenom} ${rdvAnn.client_nom}`,`${rdvAnn.prestation} · ${fmtLong(rdvAnn.date)} à ${rdvAnn.slot}`)]);
+    // Notification push retirée : Make l'envoie déjà via le trigger Postgres "trg_rdv_supprime".
+    if(rdvAnn)await sendCancelEmail(rdvAnn);
   };
 
   // États édition — doivent être AVANT tout return conditionnel
@@ -1296,9 +1301,9 @@ function AdminView({onExit}) {
       if(patchRes&&patchRes.error){alert("Erreur lors de la modification : "+(patchRes.error.message||patchRes.error));setEditSaving(false);return;}
       setRdvs(prev=>prev.map(x=>x.id===r.id?{...x,...body}:x));
       if(body.date||body.slot){
-        const nd=body.date||r.date;const ns=body.slot||r.slot;
         const rdvUpdated={...r,...body};
-        await sendPush(`✏️ Déplacé (admin) − ${r.client_prenom} ${r.client_nom}`,`${r.prestation} · ${fmtLong(nd)} à ${ns}`);
+        // Notification push retirée : les webhooks Make ci-dessous déclenchent déjà
+        // une notif "annulation" puis une notif "nouveau RDV" au nouvel horaire.
         if(r.client_email) await sendEmails(rdvUpdated,r.client_email);
         await Promise.all([notifyMakeRdvCancelled(r),notifyMakeRdvCreated(rdvUpdated)]);
       }
