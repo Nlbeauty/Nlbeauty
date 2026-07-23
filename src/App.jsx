@@ -1133,6 +1133,74 @@ function AdminCreateRdvView({allRdvs,profs,onCreated}) {
   );
 }
 
+// ── ROW RDV ADMIN — défini hors d'AdminView pour respecter les règles React ──
+// (sinon la fonction est recréée à chaque render, React démonte/remonte le champ
+// à chaque frappe et le clavier mobile se ferme après chaque lettre)
+function RdvRow({
+  r, allRdvsAdmin, svcColor, getPromoFor, ALL_SLOTS_ADMIN,
+  editingId, setEditingId,
+  editPresta, setEditPresta,
+  editPrix, setEditPrix,
+  editDate, setEditDate,
+  editSlot, setEditSlot,
+  editSaving, saveEdit, cancel,
+}) {
+  const isEditing=editingId===r.id;
+  const smsUrl=`sms:${r.client_tel}`;
+  return (
+    <div style={{padding:"16px 0",borderBottom:`1px solid ${C.borderLight}`,display:"flex",gap:14,alignItems:"flex-start",opacity:r.statut==="annulé"?.35:1}}>
+      <div style={{minWidth:44}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>{r.slot}</div><div style={{fontSize:11,color:C.textLight,marginTop:2}}>{r.duree}min</div></div>
+      <div style={{width:3,alignSelf:"stretch",borderRadius:2,background:svcColor(r.cat_id),flexShrink:0}}/>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{r.prestation}{(()=>{const promo=getPromoFor(r);if(!promo)return null;return(<span style={{fontSize:10,fontWeight:700,background:"#3a2848",color:"#f0c060",padding:"2px 8px",borderRadius:10,letterSpacing:.3}}>🎁 -{promo.remise}€ ({promo.nb}e)</span>);})()}</div>
+            <div style={{fontSize:12,color:C.textMid}}>{r.client_prenom} {r.client_nom} · {r.client_tel}</div>
+          </div>
+          <div style={{textAlign:"right",display:"flex",alignItems:"center",gap:8}}>
+            <div style={{fontSize:14,fontWeight:700,color:C.textMid}}>{r.prix} €</div>
+            {r.statut!=="annulé"&&<button onClick={()=>{setEditingId(isEditing?null:r.id);setEditPrix(String(r.prix));setEditPresta(r.prestation);setEditDate(r.date);setEditSlot(r.slot);}} style={{fontSize:11,color:C.textLight,background:"none",border:`1px solid ${C.border}`,borderRadius:7,padding:"3px 8px",cursor:"pointer"}}>{isEditing?"✕":"✏️"}</button>}
+          </div>
+        </div>
+        {isEditing&&(
+          <div style={{marginTop:10,padding:"12px 14px",background:C.surfaceAlt,borderRadius:10,border:`1px solid ${C.border}`}}>
+            <div style={{fontSize:11,color:C.textLight,marginBottom:8,letterSpacing:1,textTransform:"uppercase"}}>Modifier le RDV</div>
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:11,color:C.textLight,marginBottom:4}}>Prestation</div>
+              <input value={editPresta} onChange={e=>setEditPresta(e.target.value)} style={{width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,color:C.text,fontSize:13}}/>
+            </div>
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:11,color:C.textLight,marginBottom:4}}>Prix (€)</div>
+              <input value={editPrix} onChange={e=>setEditPrix(e.target.value)} type="number" style={{width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,color:C.text,fontSize:13}}/>
+            </div>
+            <div style={{marginBottom:8}}>
+              <div style={{fontSize:11,color:C.textLight,marginBottom:4}}>Date</div>
+              <input value={editDate} onChange={e=>{setEditDate(e.target.value);setEditSlot("");}} type="date" style={{width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,color:C.text,fontSize:13}}/>
+            </div>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:11,color:C.textLight,marginBottom:6}}>Créneau</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
+                {ALL_SLOTS_ADMIN.map(s=>{
+                  const isTakenByOther=(allRdvsAdmin||[]).some(x=>x.date===editDate&&x.slot===s&&x.statut!=="annulé"&&x.id!==r.id);
+                  const active=editSlot===s;
+                  return(<div key={s} onClick={()=>!isTakenByOther&&setEditSlot(s)} style={{padding:"7px 2px",textAlign:"center",borderRadius:6,border:`1px solid ${active?C.accent:isTakenByOther?C.borderLight:C.border}`,background:active?C.accent:isTakenByOther?C.surfaceAlt:C.surface,color:active?"#fff":isTakenByOther?C.borderLight:C.textMid,fontSize:11,cursor:isTakenByOther?"default":"pointer",textDecoration:isTakenByOther?"line-through":"none"}}>{s}</div>);
+                })}
+              </div>
+            </div>
+            <button onClick={()=>saveEdit(r)} disabled={editSaving} style={{width:"100%",padding:"8px",borderRadius:8,border:"none",background:`linear-gradient(135deg,#c9a0c0,#7a4878)`,color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>{editSaving?"Sauvegarde…":"Enregistrer"}</button>
+          </div>
+        )}
+        {r.statut!=="annulé"&&(<div style={{display:"flex",gap:8,marginTop:10}}>
+          <a href={`tel:${r.client_tel}`} style={{fontSize:12,color:C.textMid,textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 12px"}}>📞 Appeler</a>
+          <a href={smsUrl} style={{fontSize:12,color:C.textMid,textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 12px"}}>💬 Message</a>
+          <button onClick={()=>cancel(r.id)} style={{fontSize:12,color:"#c05050",background:"none",border:"1px solid #f0d0d0",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Supprimer</button>
+        </div>)}
+        {r.statut==="annulé"&&<div style={{fontSize:11,color:"#c05050",marginTop:6}}>Annulé</div>}
+      </div>
+    </div>
+  );
+}
+
 function AdminView({onExit}) {
   const [isUnlocked,setIsUnlocked]=useState(false);const [adminEmail,setAdminEmail]=useState("");const [adminPwd,setAdminPwd]=useState("");
   const [rdvs,setRdvs]=useState([]),[profs,setProfs]=useState([]);const [loading,setLoading]=useState(false),[tab,setTab]=useState("today");
@@ -1244,61 +1312,16 @@ function AdminView({onExit}) {
   // Années disponibles dans les données (pour limiter/orienter la navigation, sans bloquer si vide)
   const anneesAvecData=[...new Set(confirmes.map(r=>parseD(r.date).getFullYear()))];
   const getPromoFor=(r)=>{if(r.cat_id!=="ongles"&&r.cat_id!=="spray")return null;if(r.statut!=="confirmé")return null;const sameClient=(x)=>r.user_id?x.user_id===r.user_id:x.client_tel===r.client_tel;const allSame=rdvs.filter(x=>x.cat_id===r.cat_id&&x.statut==="confirmé"&&sameClient(x)).sort((a,b)=>(a.date+a.slot).localeCompare(b.date+b.slot));const idx=allSame.findIndex(x=>x.id===r.id);if(idx===-1)return null;const nb=idx+1;const cycle=nb%10;if(cycle===0)return{remise:10,nb};if(cycle===5)return{remise:5,nb};return null;};
-  const Row=({r,allRdvsAdmin})=>{
-    const isEditing=editingId===r.id;
-    const smsUrl=`sms:${r.client_tel}`;
-    return (
-    <div style={{padding:"16px 0",borderBottom:`1px solid ${C.borderLight}`,display:"flex",gap:14,alignItems:"flex-start",opacity:r.statut==="annulé"?.35:1}}>
-      <div style={{minWidth:44}}><div style={{fontSize:13,fontWeight:700,color:C.text}}>{r.slot}</div><div style={{fontSize:11,color:C.textLight,marginTop:2}}>{r.duree}min</div></div>
-      <div style={{width:3,alignSelf:"stretch",borderRadius:2,background:svcColor(r.cat_id),flexShrink:0}}/>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
-          <div>
-            <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{r.prestation}{(()=>{const promo=getPromoFor(r);if(!promo)return null;return(<span style={{fontSize:10,fontWeight:700,background:"#3a2848",color:"#f0c060",padding:"2px 8px",borderRadius:10,letterSpacing:.3}}>🎁 -{promo.remise}€ ({promo.nb}e)</span>);})()}</div>
-            <div style={{fontSize:12,color:C.textMid}}>{r.client_prenom} {r.client_nom} · {r.client_tel}</div>
-          </div>
-          <div style={{textAlign:"right",display:"flex",alignItems:"center",gap:8}}>
-            <div style={{fontSize:14,fontWeight:700,color:C.textMid}}>{r.prix} €</div>
-            {r.statut!=="annulé"&&<button onClick={()=>{setEditingId(isEditing?null:r.id);setEditPrix(String(r.prix));setEditPresta(r.prestation);setEditDate(r.date);setEditSlot(r.slot);}} style={{fontSize:11,color:C.textLight,background:"none",border:`1px solid ${C.border}`,borderRadius:7,padding:"3px 8px",cursor:"pointer"}}>{isEditing?"✕":"✏️"}</button>}
-          </div>
-        </div>
-        {isEditing&&(
-          <div style={{marginTop:10,padding:"12px 14px",background:C.surfaceAlt,borderRadius:10,border:`1px solid ${C.border}`}}>
-            <div style={{fontSize:11,color:C.textLight,marginBottom:8,letterSpacing:1,textTransform:"uppercase"}}>Modifier le RDV</div>
-            <div style={{marginBottom:8}}>
-              <div style={{fontSize:11,color:C.textLight,marginBottom:4}}>Prestation</div>
-              <input value={editPresta} onChange={e=>setEditPresta(e.target.value)} style={{width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,color:C.text,fontSize:13}}/>
-            </div>
-            <div style={{marginBottom:8}}>
-              <div style={{fontSize:11,color:C.textLight,marginBottom:4}}>Prix (€)</div>
-              <input value={editPrix} onChange={e=>setEditPrix(e.target.value)} type="number" style={{width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,color:C.text,fontSize:13}}/>
-            </div>
-            <div style={{marginBottom:8}}>
-              <div style={{fontSize:11,color:C.textLight,marginBottom:4}}>Date</div>
-              <input value={editDate} onChange={e=>{setEditDate(e.target.value);setEditSlot("");}} type="date" style={{width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,color:C.text,fontSize:13}}/>
-            </div>
-            <div style={{marginBottom:10}}>
-              <div style={{fontSize:11,color:C.textLight,marginBottom:6}}>Créneau</div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5}}>
-                {ALL_SLOTS_ADMIN.map(s=>{
-                  const isTakenByOther=(allRdvsAdmin||[]).some(x=>x.date===editDate&&x.slot===s&&x.statut!=="annulé"&&x.id!==r.id);
-                  const active=editSlot===s;
-                  return(<div key={s} onClick={()=>!isTakenByOther&&setEditSlot(s)} style={{padding:"7px 2px",textAlign:"center",borderRadius:6,border:`1px solid ${active?C.accent:isTakenByOther?C.borderLight:C.border}`,background:active?C.accent:isTakenByOther?C.surfaceAlt:C.surface,color:active?"#fff":isTakenByOther?C.borderLight:C.textMid,fontSize:11,cursor:isTakenByOther?"default":"pointer",textDecoration:isTakenByOther?"line-through":"none"}}>{s}</div>);
-                })}
-              </div>
-            </div>
-            <button onClick={()=>saveEdit(r)} disabled={editSaving} style={{width:"100%",padding:"8px",borderRadius:8,border:"none",background:`linear-gradient(135deg,#c9a0c0,#7a4878)`,color:"#fff",fontSize:13,fontWeight:600,cursor:"pointer"}}>{editSaving?"Sauvegarde…":"Enregistrer"}</button>
-          </div>
-        )}
-        {r.statut!=="annulé"&&(<div style={{display:"flex",gap:8,marginTop:10}}>
-          <a href={`tel:${r.client_tel}`} style={{fontSize:12,color:C.textMid,textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 12px"}}>📞 Appeler</a>
-          <a href={smsUrl} style={{fontSize:12,color:C.textMid,textDecoration:"none",border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 12px"}}>💬 Message</a>
-          <button onClick={()=>cancel(r.id)} style={{fontSize:12,color:"#c05050",background:"none",border:"1px solid #f0d0d0",borderRadius:8,padding:"5px 12px",cursor:"pointer"}}>Supprimer</button>
-        </div>)}
-        {r.statut==="annulé"&&<div style={{fontSize:11,color:"#c05050",marginTop:6}}>Annulé</div>}
-      </div>
-    </div>
-  );};
+  // Props communes à tous les RdvRow — regroupées ici pour éviter de recréer une fonction Row à chaque render
+  const rowProps={
+    allRdvsAdmin:rdvs, svcColor, getPromoFor, ALL_SLOTS_ADMIN,
+    editingId, setEditingId,
+    editPresta, setEditPresta,
+    editPrix, setEditPrix,
+    editDate, setEditDate,
+    editSlot, setEditSlot,
+    editSaving, saveEdit, cancel,
+  };
   return (
     <div style={{maxWidth:560,margin:"0 auto",padding:"0 20px 100px"}}>
       <div style={{paddingTop:48,paddingBottom:32}}>
@@ -1319,9 +1342,9 @@ function AdminView({onExit}) {
         {[["today","Aujourd'hui"],["upcoming","À venir"],["all","Tous"],["create","+ Créer RDV"],["planning","Planning"],["ca","CA mensuel"],["laser","Laser 🔒"]].map(([id,label])=>(<button key={id} onClick={()=>setTab(id)} style={{flexShrink:0,padding:"11px 10px",background:"none",border:"none",borderBottom:`2px solid ${tab===id?C.accent:"transparent"}`,color:tab===id?C.accentDark:C.textLight,fontSize:11,fontWeight:tab===id?600:400,marginBottom:-1,letterSpacing:.3,cursor:"pointer"}}>{label}</button>))}
       </div>
       {loading&&<div style={{textAlign:"center",padding:40,color:C.textLight}}>Chargement…</div>}
-      {!loading&&tab==="today"&&(<div><div style={{fontSize:12,color:C.textLight,marginBottom:16}}>{fmtLong(todayStr())}</div>{todayRdvs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous aujourd'hui.</div>:todayRdvs.map(r=><Row key={r.id} r={r} allRdvsAdmin={rdvs}/>)}</div>)}
-      {!loading&&tab==="upcoming"&&(<div>{upcoming.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous à venir.</div>:Object.entries(groupByDate(upcoming)).map(([d,list])=>(<div key={d} style={{marginBottom:28}}><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>{fmtLong(d)}</div>{list.map(r=><Row key={r.id} r={r} allRdvsAdmin={rdvs}/>)}</div>))}</div>)}
-      {!loading&&tab==="all"&&(<div>{rdvs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous.</div>:Object.entries(groupByDate([...rdvs].sort((a,b)=>b.date.localeCompare(a.date)))).map(([d,list])=>(<div key={d} style={{marginBottom:28}}><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>{fmtLong(d)}</div>{list.map(r=><Row key={r.id} r={r} allRdvsAdmin={rdvs}/>)}</div>))}</div>)}
+      {!loading&&tab==="today"&&(<div><div style={{fontSize:12,color:C.textLight,marginBottom:16}}>{fmtLong(todayStr())}</div>{todayRdvs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous aujourd'hui.</div>:todayRdvs.map(r=><RdvRow key={r.id} r={r} {...rowProps}/>)}</div>)}
+      {!loading&&tab==="upcoming"&&(<div>{upcoming.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous à venir.</div>:Object.entries(groupByDate(upcoming)).map(([d,list])=>(<div key={d} style={{marginBottom:28}}><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>{fmtLong(d)}</div>{list.map(r=><RdvRow key={r.id} r={r} {...rowProps}/>)}</div>))}</div>)}
+      {!loading&&tab==="all"&&(<div>{rdvs.length===0?<div style={{textAlign:"center",padding:"40px 0",color:C.textLight,fontSize:14}}>Aucun rendez-vous.</div>:Object.entries(groupByDate([...rdvs].sort((a,b)=>b.date.localeCompare(a.date)))).map(([d,list])=>(<div key={d} style={{marginBottom:28}}><div style={{fontSize:10,letterSpacing:2,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>{fmtLong(d)}</div>{list.map(r=><RdvRow key={r.id} r={r} {...rowProps}/>)}</div>))}</div>)}
       {!loading&&tab==="create"&&(<AdminCreateRdvView allRdvs={rdvs} profs={profs} onCreated={(saved)=>{setRdvs(p=>[...p,saved]);setTab("today");}}/>)}
       {!loading&&tab==="planning"&&(<PlanningAdmin rdvs={rdvs}/>)}
       {!loading&&tab==="ca"&&(
