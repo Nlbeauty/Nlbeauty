@@ -133,13 +133,28 @@ const notifyMakeRdvCancelled = async (rdv) => {
   } catch(e) { console.log("Make webhook (annulation) error:", e); }
 };
 
-const HORS_FIDELITE = ["Dépose extérieure","Dépose Neylika","Dépose semi-permanent","Consultation"];
+// ─── PROGRAMME FIDÉLITÉ — règle centralisée, utilisée partout ────────────────
+// Un RDV compte pour la fidélité seulement si :
+//   · il est confirmé
+//   · il est en Prothésie Ongulaire ou Spray Tan (le LASER ne compte jamais)
+//   · ce n'est ni une dépose ni une consultation
+// Le test se fait par mot-clé (et non par égalité exacte) pour rester valable
+// avec les anciens libellés courts ("Dépose extérieure") comme avec les nouveaux
+// libellés complets ("Dépose - Dépose extérieure").
+const CATS_FIDELITE = ["ongles","spray"];
+const MOTS_HORS_FIDELITE = ["dépose","consultation"];
+const compteFidelite = (r) => {
+  if(!r) return false;
+  if(!CATS_FIDELITE.includes(r.cat_id)) return false;
+  if(r.statut !== "confirmé") return false;
+  const p = (r.prestation || "").toLowerCase();
+  return !MOTS_HORS_FIDELITE.some(m => p.includes(m));
+};
+
 const checkFidelitePromo = (allRdvs, newRdv) => {
-  if(newRdv.cat_id !== "ongles" && newRdv.cat_id !== "spray") return null;
-  if(newRdv.statut !== "confirmé") return null;
-  if(HORS_FIDELITE.includes(newRdv.prestation)) return null;
+  if(!compteFidelite(newRdv)) return null;
   const sameClient = (r) => { if(newRdv.user_id) return r.user_id === newRdv.user_id; return r.client_tel === newRdv.client_tel; };
-  const existing = allRdvs.filter(r => r.cat_id === newRdv.cat_id && r.statut === "confirmé" && sameClient(r) && !HORS_FIDELITE.includes(r.prestation)).length;
+  const existing = allRdvs.filter(r => r.cat_id === newRdv.cat_id && compteFidelite(r) && sameClient(r)).length;
   const nb = existing + 1;
   const cycle = nb % 10;
   if(cycle === 0) return {remise:10, msg:`🎁 PROMO -10€ à appliquer (${nb}e RDV ${newRdv.cat_id})`, nb};
@@ -699,7 +714,11 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
     try{
       const liveRdvs=await api.get("rdvs",`date=eq.${date}&statut=neq.annulé&select=slot,duree`);
       if(Array.isArray(liveRdvs)){const ALL=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];const wantedIdx=ALL.indexOf(slot);const wantedSlotsNeeded=Math.ceil((selPresta.duree||30)/30);for(const r of liveRdvs){const rIdx=ALL.indexOf(r.slot);if(rIdx===-1)continue;const rEnd=rIdx+Math.ceil((r.duree||30)/30);const wantedEnd=wantedIdx+wantedSlotsNeeded;if(wantedIdx<rEnd&&wantedEnd>rIdx){setConfirmError("Désolée, ce créneau vient d'être réservé par quelqu'un d'autre. Choisissez-en un autre.");setSlot("");setConfirming(false);return;}}}
-      const rdv={user_id:sess.user.id,cat_id:svcId,service:svc.label,prestation:selPresta.nom,duree:selPresta.duree,prix:selPresta.prix||0,acompte:selPresta.acompte,date,slot,client_prenom:sess.profile.prenom,client_nom:sess.profile.nom,client_tel:sess.profile.tel,client_email:sess.user.email,statut:"confirmé"};
+      // Préfixe le nom de la prestation par sa sous-catégorie (ex: "Remplissage - Couleur")
+      // pour lever l'ambiguïté dans les emails, notifications et l'agenda.
+      const subLbl=svc.subcats.find(su=>su.prestations.some(pp=>pp.id===selPresta.id))?.label;
+      const prestaLabel=subLbl?`${subLbl} - ${selPresta.nom}`:selPresta.nom;
+      const rdv={user_id:sess.user.id,cat_id:svcId,service:svc.label,prestation:prestaLabel,duree:selPresta.duree,prix:selPresta.prix||0,acompte:selPresta.acompte,date,slot,client_prenom:sess.profile.prenom,client_nom:sess.profile.nom,client_tel:sess.profile.tel,client_email:sess.user.email,statut:"confirmé"};
       const res=await api.post("rdvs",rdv,sess.token);
       if(res&&res.code){setConfirmError(res.code==="23505"?"Vous avez déjà un rendez-vous à cet horaire. Choisissez un autre créneau.":"Erreur : "+(res.message||"impossible de créer le rendez-vous."));setConfirming(false);return;}
       const saved=Array.isArray(res)?res[0]:res;
@@ -1102,7 +1121,10 @@ function AdminCreateRdvView({allRdvs,profs,onCreated}) {
     try{
       const liveRdvs=await api.get("rdvs",`date=eq.${date}&statut=neq.annulé&select=slot,duree`);
       if(Array.isArray(liveRdvs)){const wantedIdx=ALL_SLOTS.indexOf(slot);const wantedSlotsNeeded=Math.ceil((presta.duree||30)/30);for(const r of liveRdvs){const rIdx=ALL_SLOTS.indexOf(r.slot);if(rIdx===-1)continue;const rEnd=rIdx+Math.ceil((r.duree||30)/30);const wantedEnd=wantedIdx+wantedSlotsNeeded;if(wantedIdx<rEnd&&wantedEnd>rIdx){setMsg({type:"err",text:"Ce créneau vient d'être pris. Rafraîchis et choisis-en un autre."});setSaving(false);return;}}}
-      const rdv={user_id,cat_id:svcId,service:svc.label,prestation:presta.nom,duree:presta.duree,prix:presta.prix||0,acompte:presta.acompte||0,date,slot,client_prenom,client_nom,client_tel,client_email,statut:"confirmé"};
+      // Préfixe le nom de la prestation par sa sous-catégorie (ex: "Remplissage - Couleur")
+      // pour lever l'ambiguïté dans les emails, notifications et l'agenda.
+      const prestaLabel=sub?`${sub.label} - ${presta.nom}`:presta.nom;
+      const rdv={user_id,cat_id:svcId,service:svc.label,prestation:prestaLabel,duree:presta.duree,prix:presta.prix||0,acompte:presta.acompte||0,date,slot,client_prenom,client_nom,client_tel,client_email,statut:"confirmé"};
       const res=await api.post("rdvs",rdv);
       if(res&&res.code){setMsg({type:"err",text:res.code==="23505"?"Cette cliente a déjà un RDV à cet horaire.":"Erreur : "+(res.message||"inconnue")});setSaving(false);return;}
       const saved=Array.isArray(res)?res[0]:res;if(!saved||saved.error){setMsg({type:"err",text:"Erreur insertion : "+(saved?.message||"inconnue")});setSaving(false);return;}
@@ -1311,7 +1333,7 @@ function AdminView({onExit}) {
   const nbRdvAnneeAffichee=caParMois.reduce((s,m)=>s+m.nb,0);
   // Années disponibles dans les données (pour limiter/orienter la navigation, sans bloquer si vide)
   const anneesAvecData=[...new Set(confirmes.map(r=>parseD(r.date).getFullYear()))];
-  const getPromoFor=(r)=>{if(r.cat_id!=="ongles"&&r.cat_id!=="spray")return null;if(r.statut!=="confirmé")return null;const sameClient=(x)=>r.user_id?x.user_id===r.user_id:x.client_tel===r.client_tel;const allSame=rdvs.filter(x=>x.cat_id===r.cat_id&&x.statut==="confirmé"&&sameClient(x)).sort((a,b)=>(a.date+a.slot).localeCompare(b.date+b.slot));const idx=allSame.findIndex(x=>x.id===r.id);if(idx===-1)return null;const nb=idx+1;const cycle=nb%10;if(cycle===0)return{remise:10,nb};if(cycle===5)return{remise:5,nb};return null;};
+  const getPromoFor=(r)=>{if(!compteFidelite(r))return null;const sameClient=(x)=>r.user_id?x.user_id===r.user_id:x.client_tel===r.client_tel;const allSame=rdvs.filter(x=>x.cat_id===r.cat_id&&compteFidelite(x)&&sameClient(x)).sort((a,b)=>(a.date+a.slot).localeCompare(b.date+b.slot));const idx=allSame.findIndex(x=>x.id===r.id);if(idx===-1)return null;const nb=idx+1;const cycle=nb%10;if(cycle===0)return{remise:10,nb};if(cycle===5)return{remise:5,nb};return null;};
   // Props communes à tous les RdvRow — regroupées ici pour éviter de recréer une fonction Row à chaque render
   const rowProps={
     allRdvsAdmin:rdvs, svcColor, getPromoFor, ALL_SLOTS_ADMIN,
@@ -1379,8 +1401,8 @@ function AdminView({onExit}) {
 }
 
 function FideliteCard({rdvs}) {
-  const rdvOngles=rdvs.filter(r=>r.cat_id==="ongles"&&r.statut==="confirmé").length;
-  const rdvSpray=rdvs.filter(r=>r.cat_id==="spray"&&r.statut==="confirmé").length;
+  const rdvOngles=rdvs.filter(r=>r.cat_id==="ongles"&&compteFidelite(r)).length;
+  const rdvSpray=rdvs.filter(r=>r.cat_id==="spray"&&compteFidelite(r)).length;
   const getPromo=(nb)=>{if(nb===0)return null;const cycle=nb%10;if(cycle===0)return{remise:10,msg:`🎁 Félicitations ! -10€ sur votre prochain RDV`};if(cycle===5)return{remise:5,msg:`🎁 Bravo ! -5€ sur votre prochain RDV`};return null;};
   const getProgress=(nb)=>{const cycle=nb%10;const next=cycle<5?5-cycle:10-cycle;const nextRemise=cycle<5?5:10;return{next,nextRemise,cycle};};
   const renderSection=(label,nb,color)=>{
