@@ -110,8 +110,12 @@ const sendPush = async (title, message) => { try { await fetch(`https://ntfy.sh/
 // Seul le DÉPLACEMENT (changement de date/slot sans changement de statut) n'est couvert par
 // aucun trigger Postgres : on appelle donc Make manuellement dans ce cas précis uniquement,
 // pour supprimer l'ancien événement Google et recréer le nouveau au bon horaire.
-const MAKE_HOOK_RDV_CREATED = "https://hook.eu1.make.com/ts1aq7d3ovff4g2sf4lxexdms1ssdxle";
-const MAKE_HOOK_RDV_CANCELLED = "https://hook.eu1.make.com/hrrij492yn2c5wnhbkb7yd5xsvwhcucx";
+// ⚠️ Ces URL doivent correspondre aux webhooks ACTIFS dans Make (ceux rattachés à un scénario).
+// Ce sont les mêmes que celles utilisées par les triggers Postgres notify_make_rdv_cree /
+// notify_make_rdv_annule. Les anciennes URL (…ts1aq7d3… et …hrrij492…) étaient orphelines
+// ("gone"), ce qui faisait que les déplacements n'arrivaient jamais dans Google Agenda.
+const MAKE_HOOK_RDV_CREATED = "https://hook.eu1.make.com/7aflelh9w3050nfos5p7gxho13ayetpe";
+const MAKE_HOOK_RDV_CANCELLED = "https://hook.eu1.make.com/56ste6q6m4b37jopwvkio7t29r24uwjk";
 
 const notifyMakeRdvCreated = async (rdv) => {
   try {
@@ -960,11 +964,12 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
       const rdvUpdated={...modifyingRdv,date:newDate,slot:newSlot};
       // Notification push retirée : les deux webhooks Make ci-dessous déclenchent déjà
       // une notif "annulation" puis une notif "nouveau RDV" au nouvel horaire.
-      await Promise.all([
-        sendEmails(rdvUpdated,session.user.email),
-        notifyMakeRdvCancelled(modifyingRdv),
-        notifyMakeRdvCreated(rdvUpdated),
-      ]);
+      // ⚠️ Séquentiel (et non Promise.all) : on supprime l'ancien évènement Google AVANT de
+      // créer le nouveau, sinon set_gcal_event_id peut être écrasé dans le mauvais ordre et
+      // laisser un évènement fantôme dans l'agenda.
+      await notifyMakeRdvCancelled(modifyingRdv);
+      await notifyMakeRdvCreated(rdvUpdated);
+      await sendEmails(rdvUpdated,session.user.email);
       if(onRdvModified)onRdvModified(modifyingRdv.id,{date:newDate,slot:newSlot});
       setModifyDone(true);
       setTimeout(()=>{setModifyingRdv(null);setModifyDone(false);setNewDate("");setNewSlot("");},2000);
@@ -1118,8 +1123,8 @@ function AdminCreateRdvView({allRdvs,profs,onCreated}) {
     if(saving)return;setMsg(null);
     if(!presta){setMsg({type:"err",text:"Choisis une prestation."});return;}if(!date||!slot){setMsg({type:"err",text:"Choisis une date et un créneau."});return;}if(!slotFitsDuration(slot)){setMsg({type:"err",text:"Ce créneau chevauche un autre RDV."});return;}
     let client_prenom,client_nom,client_tel,client_email,user_id;
-    if(mode==="existing"){if(!selectedClientId){setMsg({type:"err",text:"Choisis une cliente."});return;}const c=profs.find(p=>p.id===selectedClientId);if(!c){setMsg({type:"err",text:"Cliente introuvable."});return;}client_prenom=c.prenom;client_nom=c.nom;client_tel=c.tel;client_email=c.email||"";user_id=c.id;}
-    else{if(!newPrenom||!newNom||!newTel){setMsg({type:"err",text:"Prénom, nom et téléphone requis."});return;}client_prenom=newPrenom;client_nom=newNom;client_tel=newTel;client_email=newEmail||"";user_id=null;}
+    if(mode==="existing"){if(!selectedClientId){setMsg({type:"err",text:"Choisis une cliente."});return;}const c=profs.find(p=>p.id===selectedClientId);if(!c){setMsg({type:"err",text:"Cliente introuvable."});return;}client_prenom=c.prenom;client_nom=c.nom;client_tel=c.tel;client_email=c.email||null;user_id=c.id;}
+    else{if(!newPrenom||!newNom||!newTel){setMsg({type:"err",text:"Prénom, nom et téléphone requis."});return;}client_prenom=newPrenom;client_nom=newNom;client_tel=newTel;client_email=newEmail.trim()||null;user_id=null;}
     setSaving(true);
     try{
       const liveRdvs=await api.get("rdvs",`date=eq.${date}&statut=neq.annulé&select=slot,duree`);
@@ -1304,8 +1309,10 @@ function AdminView({onExit}) {
         const rdvUpdated={...r,...body};
         // Notification push retirée : les webhooks Make ci-dessous déclenchent déjà
         // une notif "annulation" puis une notif "nouveau RDV" au nouvel horaire.
+        // ⚠️ Séquentiel : on supprime l'ancien évènement Google AVANT de créer le nouveau.
+        await notifyMakeRdvCancelled(r);
+        await notifyMakeRdvCreated(rdvUpdated);
         if(r.client_email) await sendEmails(rdvUpdated,r.client_email);
-        await Promise.all([notifyMakeRdvCancelled(r),notifyMakeRdvCreated(rdvUpdated)]);
       }
     }
     setEditingId(null);setEditSaving(false);
