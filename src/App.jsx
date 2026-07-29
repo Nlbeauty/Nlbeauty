@@ -195,16 +195,16 @@ const api = {
 const SERVICES = [
   {
     id: "ongles", label: "Prothésie Ongulaire — Mains", color: "#c4a882",
-    desc: "Gainage, capsules & nail art",
+    desc: "Gel ou semi-permanent",
     subcats: [
       {
-        id: "gainage", label: "Gainage sur ongle naturel",
+        id: "gainage", label: "Gainage gel sur ongle naturel",
         prestations: [
           { id:"g1", nom:"Naturel / Milky", duree:120, prix:45, acompte:15 },
           { id:"g2", nom:"Couleur uni", duree:120, prix:50, acompte:15 },
           { id:"g3", nom:"French", duree:120, prix:50, acompte:15 },
           { id:"g4", nom:"Chrome", duree:120, prix:50, acompte:15 },
-          { id:"g5", nom:"Nail art", duree:120, prix:null, acompte:0, devis:true },
+          { id:"g5", nom:"Nail art", duree:120, prix:60, acompte:0, apartir:true },
         ],
       },
       {
@@ -214,18 +214,18 @@ const SERVICES = [
           { id:"c2", nom:"Couleur uni", duree:120, prix:55, acompte:15 },
           { id:"c3", nom:"French", duree:120, prix:55, acompte:15 },
           { id:"c4", nom:"Chrome", duree:120, prix:55, acompte:15 },
-          { id:"c5", nom:"Nail art", duree:120, prix:null, acompte:0, devis:true },
+          { id:"c5", nom:"Nail art", duree:120, prix:60, acompte:0, apartir:true },
         ],
       },
       {
-        id: "remplissage", label: "Remplissage",
+        id: "remplissage", label: "Remplissage gel",
         note: "⚠️ Au-delà de 3 semaines, un supplément de 5 € sera demandé le jour J.",
         prestations: [
           { id:"r1", nom:"Naturel / Milky", duree:120, prix:45, acompte:15 },
           { id:"r2", nom:"Couleur", duree:120, prix:50, acompte:15 },
           { id:"r3", nom:"French", duree:120, prix:50, acompte:15 },
           { id:"r4", nom:"Chrome", duree:120, prix:50, acompte:15 },
-          { id:"r5", nom:"Nail art", duree:120, prix:null, acompte:0, devis:true },
+          { id:"r5", nom:"Nail art", duree:120, prix:60, acompte:0, apartir:true },
         ],
       },
       {
@@ -246,7 +246,7 @@ const SERVICES = [
   },
   {
     id: "laser", label: "Épilation Laser Diode", color: "#9a8fb0",
-    desc: "Épilation définitive à domicile",
+    desc: "Épilation définitive en salon privé",
     locked: true,
     subcats: [
       {
@@ -584,7 +584,7 @@ function AuthModal({onAuth,onClose,booking}) {
         {mode==="signup"&&(<div className="fu"><div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:0}}><div style={{marginBottom:12}}><Lbl>Prénom</Lbl><Inp value={prenom} onChange={e=>setPrenom(e.target.value)} placeholder="Marie"/></div><div style={{marginBottom:12}}><Lbl>Nom</Lbl><Inp value={nom} onChange={e=>setNom(e.target.value)} placeholder="Dupont"/></div></div><div style={{marginBottom:12}}><Lbl>Téléphone</Lbl><Inp value={tel} onChange={e=>setTel(e.target.value)} placeholder="06 00 00 00 00" type="tel"/></div></div>)}
         <div style={{marginBottom:12}}><Lbl>Email</Lbl><Inp value={email} onChange={e=>setEmail(e.target.value)} placeholder="marie@email.fr" type="email"/></div>
         <div style={{marginBottom:12}}><Lbl>Mot de passe</Lbl><Inp value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••••" type="password"/></div>
-        {mode==="login"&&(<div style={{marginBottom:14,marginTop:-8,textAlign:"right"}}><button type="button" onClick={async()=>{if(!email){setResetMsg("Saisis ton email d'abord.");return;}setResetLoading(true);setResetMsg("");const r=await resetClientPassword(email);setResetLoading(false);if(r.ok){setResetMsg("✓ Email envoyé ! Vérifie ta boîte (et les spams).");}else{setResetMsg("Erreur : "+r.error);}}} style={{background:"none",border:"none",color:C.accentDark,fontSize:13,cursor:"pointer",textDecoration:"underline",padding:0,fontFamily:"inherit"}}>{resetLoading?"Envoi…":"Mot de passe oublié ?"}</button></div>)}
+        {mode==="login"&&(<div style={{marginBottom:14,marginTop:-8,textAlign:"right"}}><button type="button" onClick={async()=>{if(!email){setResetMsg("Saisissez votre email d'abord.");return;}setResetLoading(true);setResetMsg("");const r=await resetClientPassword(email);setResetLoading(false);if(r.ok){setResetMsg("✓ Email envoyé ! Vérifiez votre boîte (et les spams).");}else{setResetMsg("Erreur : "+r.error);}}} style={{background:"none",border:"none",color:C.accentDark,fontSize:13,cursor:"pointer",textDecoration:"underline",padding:0,fontFamily:"inherit"}}>{resetLoading?"Envoi…":"Mot de passe oublié ?"}</button></div>)}
         {resetMsg&&<div style={{fontSize:13,color:resetMsg.startsWith("✓")?"#2d7a4f":"#c05050",marginBottom:14,padding:"10px 14px",background:resetMsg.startsWith("✓")?"#e8f5ee":"#fff0f0",borderRadius:8}}>{resetMsg}</div>}
         {err&&<div style={{fontSize:13,color:"#c05050",marginBottom:14,padding:"10px 14px",background:"#fff0f0",borderRadius:8}}>{err}</div>}
         <PBtn onClick={submit} disabled={loading}>{loading?"Chargement…":mode==="login"?booking?"Confirmer ma réservation":"Se connecter":booking?"Créer mon compte et réserver":"Créer un compte"}</PBtn>
@@ -595,7 +595,7 @@ function AuthModal({onAuth,onClose,booking}) {
 }
 
 function PlanityDatePicker({selPresta,allRdvs,allSupaBlocked,selectedDate,selectedSlot,onSelect}) {
-  const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const SEMAINE=["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const WEEKEND=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const DAYS_S_L=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
@@ -669,12 +669,16 @@ function AdresseBlock(){
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}><span style={{fontSize:18,color:C.accent}}>📍</span><div style={{fontWeight:500,fontSize:14,color:C.text}}>Adresse du rendez-vous</div></div>
       <div style={{fontSize:16,marginBottom:4,color:C.text,fontWeight:500}}>9 rue André Saves</div>
       <div style={{fontSize:14,marginBottom:16,color:C.textLight}}>31300 Toulouse</div>
+      <div style={{marginBottom:16,padding:"12px 14px",background:C.surfaceAlt,borderRadius:10,display:"flex",flexDirection:"column",gap:7}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:8,fontSize:13,color:C.textMid,lineHeight:1.5}}><span>🚊</span><span>Tram T1 — arrêt Cartoucherie</span></div>
+        <div style={{display:"flex",alignItems:"flex-start",gap:8,fontSize:13,color:C.textMid,lineHeight:1.5}}><span>🅿️</span><span>Parking Raymond Badiou</span></div>
+      </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:18}}>
         <a href={mapsUrl} target="_blank" rel="noopener noreferrer" style={btnN}>🗺️ Maps</a>
         <a href={wazeUrl} target="_blank" rel="noopener noreferrer" style={btnN}>🧭 Waze</a>
       </div>
       <div style={{borderTop:`1px solid ${C.borderLight}`,paddingTop:14}}>
-        <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12}}><span style={{fontSize:16,color:C.accent,marginTop:2}}>🔔</span><div style={{fontSize:13,color:C.textMid,lineHeight:1.5}}>Préviens-moi quand tu arrives 💜</div></div>
+        <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:12}}><span style={{fontSize:16,color:C.accent,marginTop:2}}>🔔</span><div style={{fontSize:13,color:C.textMid,lineHeight:1.5}}>Prévenez-moi quand vous arrivez 💜</div></div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <a href={instaUrl} target="_blank" rel="noopener noreferrer" style={btnA}>📷 Instagram</a>
           <a href={smsUrl} style={btnN}>💬 SMS</a>
@@ -689,7 +693,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
   const [date,setDate]=useState("");const [slot,setSlot]=useState("");const [showAuth,setShowAuth]=useState(false);const [done,setDone]=useState(null);
   const [showSprayModal,setShowSprayModal]=useState(false);
   const svc=svcId?SERVICES.find(s=>s.id===svcId):null;
-  const ALL_SLOTS_RES=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const ALL_SLOTS_RES=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const SEMAINE_RES=["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const WEEKEND_RES=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const [supaBlocked,setSupaBlocked]=useState([]);const [allSupaBlocked,setAllSupaBlocked]=useState({});
@@ -717,7 +721,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
     setShowAuth(false);if(!selPresta||!date||!slot)return;if(confirming)return;setConfirming(true);setConfirmError("");
     try{
       const liveRdvs=await api.get("rdvs",`date=eq.${date}&statut=neq.annulé&select=slot,duree`);
-      if(Array.isArray(liveRdvs)){const ALL=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];const wantedIdx=ALL.indexOf(slot);const wantedSlotsNeeded=Math.ceil((selPresta.duree||30)/30);for(const r of liveRdvs){const rIdx=ALL.indexOf(r.slot);if(rIdx===-1)continue;const rEnd=rIdx+Math.ceil((r.duree||30)/30);const wantedEnd=wantedIdx+wantedSlotsNeeded;if(wantedIdx<rEnd&&wantedEnd>rIdx){setConfirmError("Désolée, ce créneau vient d'être réservé par quelqu'un d'autre. Choisissez-en un autre.");setSlot("");setConfirming(false);return;}}}
+      if(Array.isArray(liveRdvs)){const ALL=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];const wantedIdx=ALL.indexOf(slot);const wantedSlotsNeeded=Math.ceil((selPresta.duree||30)/30);for(const r of liveRdvs){const rIdx=ALL.indexOf(r.slot);if(rIdx===-1)continue;const rEnd=rIdx+Math.ceil((r.duree||30)/30);const wantedEnd=wantedIdx+wantedSlotsNeeded;if(wantedIdx<rEnd&&wantedEnd>rIdx){setConfirmError("Désolée, ce créneau vient d'être réservé par quelqu'un d'autre. Choisissez-en un autre.");setSlot("");setConfirming(false);return;}}}
       // Préfixe le nom de la prestation par sa sous-catégorie (ex: "Remplissage - Couleur")
       // pour lever l'ambiguïté dans les emails, notifications et l'agenda.
       const subLbl=svc.subcats.find(su=>su.prestations.some(pp=>pp.id===selPresta.id))?.label;
@@ -794,9 +798,10 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
                             <div>
                               <div style={{fontSize:14,fontWeight:active?600:400,color:active?C.accentDark:C.text}}>{p.nom}</div>
                               <div style={{fontSize:12,color:"#a090c0",marginTop:2}}>{p.duree} min</div>
+                              {p.apartir&&<div style={{fontSize:11,color:C.lockedText,marginTop:3,lineHeight:1.4,maxWidth:210}}>Devis selon le motif choisi — tarif confirmé ensemble avant le RDV</div>}
                             </div>
                             <div style={{textAlign:"right",flexShrink:0}}>
-                              {p.devis?<span style={{fontSize:14,fontWeight:600,color:C.lockedText}}>Sur devis</span>:<>{p.prixNormal&&<div style={{fontSize:11,color:C.textLight,textDecoration:"line-through",marginBottom:1}}>{p.prixNormal} €</div>}<div style={{fontSize:15,fontWeight:700,color:p.prixNormal?"#e07070":active?C.accentDark:C.textMid}}>{p.prix} €</div>{p.prixNormal&&<div style={{fontSize:10,color:"#e07070",fontWeight:700,letterSpacing:.5}}>-50%</div>}</>}
+                              {p.devis?<span style={{fontSize:14,fontWeight:600,color:C.lockedText}}>Sur devis</span>:<>{p.apartir&&<div style={{fontSize:10,color:C.textLight,letterSpacing:.3,marginBottom:1}}>à partir de</div>}{p.prixNormal&&<div style={{fontSize:11,color:C.textLight,textDecoration:"line-through",marginBottom:1}}>{p.prixNormal} €</div>}<div style={{fontSize:15,fontWeight:700,color:p.prixNormal?"#e07070":active?C.accentDark:C.textMid}}>{p.prix} €</div>{p.prixNormal&&<div style={{fontSize:10,color:"#e07070",fontWeight:700,letterSpacing:.5}}>-50%</div>}</>}
                             </div>
                           </div>
                         );
@@ -906,7 +911,7 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
   const [modifyDone,setModifyDone]=useState(false);
   const [allSupaBlocked,setAllSupaBlocked]=useState({});
 
-  const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const SEMAINE_M=["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const WEEKEND_M=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
 
@@ -1036,7 +1041,7 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
 }
 
 function PlanningAdmin({rdvs}) {
-  const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const SEMAINE=["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const WEEKEND=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const [selDate,setSelDate]=useState(todayStr());const [supaBlocked,setSupaBlocked]=useState([]);const [saving,setSaving]=useState(false);
@@ -1111,7 +1116,7 @@ function PlanningAdmin({rdvs}) {
 }
 
 function AdminCreateRdvView({allRdvs,profs,onCreated}) {
-  const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const [mode,setMode]=useState("existing");const [selectedClientId,setSelectedClientId]=useState("");
   const [newPrenom,setNewPrenom]=useState("");const [newNom,setNewNom]=useState("");const [newTel,setNewTel]=useState("");const [newEmail,setNewEmail]=useState("");
   const [svcId,setSvcId]=useState("");const [subId,setSubId]=useState("");const [prestaId,setPrestaId]=useState("");
@@ -1290,7 +1295,7 @@ function AdminView({onExit}) {
   const [editDate,setEditDate]=useState("");
   const [editSlot,setEditSlot]=useState("");
   const [editSaving,setEditSaving]=useState(false);
-  const ALL_SLOTS_ADMIN=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const ALL_SLOTS_ADMIN=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const saveEdit=async(r)=>{
     setEditSaving(true);
     const body={};
@@ -1503,7 +1508,7 @@ export default function App() {
             <h1 style={{fontFamily:"'Cormorant Garamond',serif",fontSize:42,fontWeight:300,color:C.text,lineHeight:1,letterSpacing:6,textTransform:"uppercase"}}>Neylika</h1>
             {session?(<div style={{textAlign:"right"}}><div style={{fontSize:13,fontWeight:500,color:C.textMid}}>{session.profile?.prenom}</div><button onClick={handleLogout} style={{fontSize:11,color:C.textLight,background:"none",border:"none",cursor:"pointer",marginTop:2}}>Déconnexion</button></div>):(<button onClick={()=>setShowLoginModal(true)} style={{fontSize:13,color:"#d4c4e8",background:"none",border:`1px solid ${C.border}`,borderRadius:20,padding:"8px 16px",cursor:"pointer"}}>Se connecter</button>)}
           </div>
-          <p style={{fontSize:15,color:"#d4c4ec",marginTop:10,lineHeight:1.7,letterSpacing:.5,fontStyle:"italic"}}>Ton adresse beauté à la Cartoucherie · Ongles · Laser · Bronzage</p>
+          <p style={{fontSize:15,color:"#d4c4ec",marginTop:10,lineHeight:1.7,letterSpacing:.5,fontStyle:"italic"}}>Votre adresse beauté à la Cartoucherie · Ongles · Laser · Bronzage</p>
           <div style={{display:"flex",gap:12,marginTop:12,alignItems:"center"}}>
             <a href="https://www.instagram.com/neylika31/" target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,textDecoration:"none"}}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="2" width="20" height="20" rx="6" stroke="#c9a0c0" strokeWidth="1.5"/><circle cx="12" cy="12" r="4" stroke="#c9a0c0" strokeWidth="1.5"/><circle cx="17.5" cy="6.5" r="1" fill="#c9a0c0"/></svg>
