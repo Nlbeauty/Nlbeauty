@@ -204,7 +204,7 @@ const SERVICES = [
           { id:"g2", nom:"Couleur uni", duree:120, prix:50, acompte:15 },
           { id:"g3", nom:"French", duree:120, prix:50, acompte:15 },
           { id:"g4", nom:"Chrome", duree:120, prix:50, acompte:15 },
-          { id:"g5", nom:"Nail art", duree:120, prix:60, acompte:0, apartir:true },
+          { id:"g5", nom:"Nail art", duree:150, prix:60, acompte:0, apartir:true },
         ],
       },
       {
@@ -214,7 +214,7 @@ const SERVICES = [
           { id:"c2", nom:"Couleur uni", duree:120, prix:55, acompte:15 },
           { id:"c3", nom:"French", duree:120, prix:55, acompte:15 },
           { id:"c4", nom:"Chrome", duree:120, prix:55, acompte:15 },
-          { id:"c5", nom:"Nail art", duree:120, prix:60, acompte:0, apartir:true },
+          { id:"c5", nom:"Nail art", duree:150, prix:60, acompte:0, apartir:true },
         ],
       },
       {
@@ -225,7 +225,7 @@ const SERVICES = [
           { id:"r2", nom:"Couleur", duree:120, prix:50, acompte:15 },
           { id:"r3", nom:"French", duree:120, prix:50, acompte:15 },
           { id:"r4", nom:"Chrome", duree:120, prix:50, acompte:15 },
-          { id:"r5", nom:"Nail art", duree:120, prix:60, acompte:0, apartir:true },
+          { id:"r5", nom:"Nail art", duree:150, prix:60, acompte:0, apartir:true },
         ],
       },
       {
@@ -597,7 +597,7 @@ function AuthModal({onAuth,onClose,booking}) {
 function PlanityDatePicker({selPresta,allRdvs,allSupaBlocked,selectedDate,selectedSlot,onSelect}) {
   const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const SEMAINE=["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const WEEKEND=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const WEEKEND=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const DAYS_S_L=["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
   const MONTHS_F=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
   const DAYS_L_L=["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
@@ -695,7 +695,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
   const svc=svcId?SERVICES.find(s=>s.id===svcId):null;
   const ALL_SLOTS_RES=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const SEMAINE_RES=["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const WEEKEND_RES=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const WEEKEND_RES=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const [supaBlocked,setSupaBlocked]=useState([]);const [allSupaBlocked,setAllSupaBlocked]=useState({});
   useEffect(()=>{if(!selPresta)return;api.get("blocked_slots","select=date,slot").then(d=>{if(!Array.isArray(d))return;const map={};d.forEach(r=>{if(!map[r.date])map[r.date]=[];map[r.date].push(r.slot);});setAllSupaBlocked(map);});},[selPresta]);
   useEffect(()=>{if(!date)return;api.get("blocked_slots",`date=eq.${date}&select=slot`).then(d=>{if(Array.isArray(d))setSupaBlocked(d.map(r=>r.slot));});},[date]);
@@ -913,7 +913,7 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
 
   const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const SEMAINE_M=["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const WEEKEND_M=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const WEEKEND_M=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
 
   useEffect(()=>{
     if(!modifyingRdv)return;
@@ -1043,7 +1043,7 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
 function PlanningAdmin({rdvs}) {
   const ALL_SLOTS=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const SEMAINE=["17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
-  const WEEKEND=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
+  const WEEKEND=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const [selDate,setSelDate]=useState(todayStr());const [supaBlocked,setSupaBlocked]=useState([]);const [saving,setSaving]=useState(false);
   const dow=selDate?parseD(selDate).getDay():1;const isWE=dow===0||dow===6;const autoAllowed=isWE?WEEKEND:SEMAINE;
   const loadBlocked=async(date)=>{const d=await api.get("blocked_slots",`date=eq.${date}&select=slot`);if(Array.isArray(d))setSupaBlocked(d.map(r=>r.slot));};
