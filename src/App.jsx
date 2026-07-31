@@ -963,7 +963,7 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
           if(wantedIdx<rEnd&&wantedIdx+slotsNeeded>rIdx){setModifyError("Ce créneau vient d'être pris. Choisissez-en un autre.");setModifying(false);return;}
         }
       }
-      const res=await api.patch("rdvs",`id=eq.${modifyingRdv.id}`,{date:newDate,slot:newSlot},token);
+      const res=await api.patch("rdvs",`id=eq.${modifyingRdv.id}`,{date:newDate,slot:newSlot,gcal_event_id:null},token);
       const updated=Array.isArray(res)?res[0]:res;
       if(!updated||updated.error){setModifyError("Impossible de modifier. Contactez-nous.");setModifying(false);return;}
       const rdvUpdated={...modifyingRdv,date:newDate,slot:newSlot};
@@ -1304,6 +1304,7 @@ function AdminView({onExit}) {
     if(!isNaN(p)&&p!==r.prix) body.prix=p;
     if(editDate&&editDate!==r.date) body.date=editDate;
     if(editSlot&&editSlot!==r.slot) body.slot=editSlot;
+    if(body.date||body.slot) body.gcal_event_id=null;
     if(Object.keys(body).length>0){
       const session=await getValidAdminSession();
       if(!session){alert("Session admin expirée. Reconnecte-toi puis réessaie.");setIsUnlocked(false);setEditSaving(false);return;}
