@@ -174,12 +174,19 @@ const getClientSession = () => {
 const api = {
   h: { "apikey": SUPA_KEY, "Authorization": `Bearer ${SUPA_KEY}`, "Content-Type": "application/json" },
   ah: (t) => ({ "apikey": SUPA_KEY, "Authorization": `Bearer ${t}`, "Content-Type": "application/json", "Prefer": "return=representation" }),
+  // La session ADMIN passe en premier. Avant, une session cliente restée ouverte
+  // sur le même navigateur prenait le dessus : les écritures partaient sous
+  // l'identité de la cliente, étaient refusées par la base, et rien ne
+  // s'affichait à l'écran. C'est l'origine des RDV créés qui disparaissaient.
   authHeaders() {
+    const s = getAdminSession();
+    if (s && s.access_token) return this.ah(s.access_token);
     const clientSess = getClientSession();
     if (clientSess && clientSess.token) return this.ah(clientSess.token);
-    const s = getAdminSession();
-    return s ? this.ah(s.access_token) : this.h;
+    return this.h;
   },
+  // Appel d'une fonction de la base (utilisé pour les créneaux occupés)
+  async rpc(fn, body={}) { const r=await fetch(`${SUPA_URL}/rest/v1/rpc/${fn}`,{method:"POST",headers:{...this.authHeaders(),"Content-Type":"application/json"},body:JSON.stringify(body)}); return r.json(); },
   async get(table, q="") { const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${q}`,{headers:this.authHeaders()}); return r.json(); },
   async post(table, body, token) { const h=token?this.ah(token):{...this.authHeaders(),"Prefer":"return=representation"}; const r=await fetch(`${SUPA_URL}/rest/v1/${table}`,{method:"POST",headers:h,body:JSON.stringify(body)}); return r.json(); },
   async patch(table, filter, body, token) { const h=token?{...this.ah(token),"Prefer":"return=representation"}:{...this.authHeaders(),"Prefer":"return=representation"}; const r=await fetch(`${SUPA_URL}/rest/v1/${table}?${filter}`,{method:"PATCH",headers:h,body:JSON.stringify(body)}); return r.json(); },
@@ -688,7 +695,7 @@ function AdresseBlock(){
   );
 }
 
-function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
+function ReservationView({session,allRdvs,clientRdvs,onBooked,laserUnlocked,onAuth}) {
   const [svcId,setSvcId]=useState(null);const [openSub,setOpenSub]=useState(null);const [selPresta,setSelPresta]=useState(null);
   const [date,setDate]=useState("");const [slot,setSlot]=useState("");const [showAuth,setShowAuth]=useState(false);const [done,setDone]=useState(null);
   const [showSprayModal,setShowSprayModal]=useState(false);
@@ -733,7 +740,7 @@ function ReservationView({session,allRdvs,onBooked,laserUnlocked,onAuth}) {
       if(!saved||!saved.id){setConfirmError("Erreur : le rendez-vous n'a pas pu être enregistré. Réessayez ou contactez-nous.");setConfirming(false);return;}
       // Notification push retirée : Make l'envoie déjà via le trigger Postgres "make-rdvs".
       await sendEmails(saved,sess.user.email);
-      const promoFid=checkFidelitePromo(allRdvs,saved);if(promoFid)await sendPush(`🎁 FIDÉLITÉ — ${saved.client_prenom} ${saved.client_nom}`,promoFid.msg);
+      const promoFid=checkFidelitePromo(clientRdvs||[],saved);if(promoFid)await sendPush(`🎁 FIDÉLITÉ — ${saved.client_prenom} ${saved.client_nom}`,promoFid.msg);
       setDone(saved);onBooked(saved);sc(doneRef);
     }catch(e){console.log("Erreur réservation:",e);setConfirmError("Erreur réseau. Vérifiez votre connexion et réessayez.");}
     setConfirming(false);
@@ -1138,7 +1145,11 @@ function AdminCreateRdvView({allRdvs,profs,onCreated}) {
       // pour lever l'ambiguïté dans les emails, notifications et l'agenda.
       const prestaLabel=sub?`${sub.label} - ${presta.nom}`:presta.nom;
       const rdv={user_id,cat_id:svcId,service:svc.label,prestation:prestaLabel,duree:presta.duree,prix:presta.prix||0,acompte:presta.acompte||0,date,slot,client_prenom,client_nom,client_tel,client_email,statut:"confirmé"};
-      const res=await api.post("rdvs",rdv);
+      // Sans jeton, l'insertion partait en anonyme et la base la refusait en
+      // silence : le RDV semblait créé mais n'existait pas.
+      const sessionAdmin=await getValidAdminSession();
+      if(!sessionAdmin){setMsg({type:"err",text:"Session admin expirée. Reconnecte-toi puis réessaie."});setSaving(false);return;}
+      const res=await api.post("rdvs",rdv,sessionAdmin.access_token);
       if(res&&res.code){setMsg({type:"err",text:res.code==="23505"?"Cette cliente a déjà un RDV à cet horaire.":"Erreur : "+(res.message||"inconnue")});setSaving(false);return;}
       const saved=Array.isArray(res)?res[0]:res;if(!saved||saved.error){setMsg({type:"err",text:"Erreur insertion : "+(saved?.message||"inconnue")});setSaving(false);return;}
       // Notification push retirée : Make l'envoie déjà via le trigger Postgres "make-rdvs".
@@ -1267,7 +1278,12 @@ function AdminView({onExit}) {
   };
   const toggleLaser=async(uid)=>{
     const newVal=!laserAccess[uid];
-    const res=await fetch(`${SUPA_URL}/rest/v1/rpc/admin_set_laser_access`,{method:"POST",headers:api.authHeaders(),body:JSON.stringify({target_user_id:uid,new_value:newVal,admin_code:"2604"})});
+    // L'ancien code admin était écrit en clair dans le fichier public du site :
+    // n'importe qui pouvait s'en servir pour se débloquer le laser. La base
+    // vérifie désormais l'identité du compte connecté, pas un code.
+    const sessionAdmin=await getValidAdminSession();
+    if(!sessionAdmin){alert("Session admin expirée. Reconnecte-toi puis réessaie.");return;}
+    const res=await fetch(`${SUPA_URL}/rest/v1/rpc/admin_set_laser_access`,{method:"POST",headers:api.ah(sessionAdmin.access_token),body:JSON.stringify({target_user_id:uid,new_value:newVal})});
     if(!res.ok){const errText=await res.text();alert("Erreur déblocage laser : "+errText);return;}
     const updated={...laserAccess,[uid]:newVal};setLaserAccess(updated);localStorage.setItem("laser_access",JSON.stringify(updated));
   };
@@ -1460,12 +1476,16 @@ export default function App() {
       }catch{localStorage.removeItem("nlb_sess");}
     };
     init();
-    api.get("rdvs","select=*&order=date.asc").then(d=>{if(Array.isArray(d))setAllRdvs(d);});
+    // On ne lit plus toute la table des RDV (noms, téléphones, emails de
+    // toutes les clientes). On demande seulement les horaires occupés, via une
+    // fonction qui ne renvoie ni nom ni coordonnées. Effet de bord corrigé :
+    // une visiteuse non connectée voyait tous les créneaux comme libres.
+    api.rpc("creneaux_occupes").then(d=>{if(Array.isArray(d))setAllRdvs(d);});
     const onStorage=()=>setLaserAccess(()=>{try{return JSON.parse(localStorage.getItem("laser_access")||"{}");}catch{return {};}});
     window.addEventListener("storage",onStorage);return()=>window.removeEventListener("storage",onStorage);
   },[]);
   useEffect(()=>{
-    const refreshAllRdvs=()=>{api.get("rdvs","select=*&order=date.asc").then(d=>{if(Array.isArray(d))setAllRdvs(d);});};
+    const refreshAllRdvs=()=>{api.rpc("creneaux_occupes").then(d=>{if(Array.isArray(d))setAllRdvs(d);});};
     const interval=setInterval(refreshAllRdvs,30*1000);
     const onVisible=()=>{if(document.visibilityState==="visible")refreshAllRdvs();};
     document.addEventListener("visibilitychange",onVisible);window.addEventListener("focus",refreshAllRdvs);
@@ -1521,7 +1541,7 @@ export default function App() {
             </a>
           </div>
         </div>
-        {tab==="reserver"&&<ReservationView session={session} allRdvs={allRdvs} onBooked={handleBooked} laserUnlocked={laserUnlocked} onAuth={handleAuth}/>}
+        {tab==="reserver"&&<ReservationView session={session} allRdvs={allRdvs} clientRdvs={clientRdvs} onBooked={handleBooked} laserUnlocked={laserUnlocked} onAuth={handleAuth}/>}
         {tab==="mesrdvs"&&(
           <div className="fu">
             <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,marginBottom:24}}>Mes rendez-vous</div>
