@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, Fragment } from "react";
 
 const SUPA_URL = "https://xpackkiprznsrotsohce.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwYWNra2lwcnpuc3JvdHNvaGNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NTkzMTIsImV4cCI6MjA5MTIzNTMxMn0.BBZzEnIkHfGcrMPoRa8cMp3_KKrlFAnsg8lXQijC9dA";
@@ -281,38 +281,67 @@ const SERVICES = [
         ],
       },
       {
-        id: "laser_forfaits", label: "Forfaits 8 séances combinés",
+        id: "laser_1z", label: "Forfait 8 séances · 1 zone", badge: "–30 %", hint: "11 zones",
+        note: "🎯 Le protocole complet en 8 séances, sur une seule zone. Prix affichés remise déduite.",
         prestations: [
-          { id:"lf1", nom:"Aisselles + Maillot intégral", duree:55, prix:620, prixNormal:1240, acompte:0 },
-          { id:"lf2", nom:"Aisselles + Maillot intégral + Demi-jambes", duree:95, prix:1180, prixNormal:2360, acompte:0 },
-          { id:"lf3", nom:"Aisselles + Maillot intégral + Jambes entières", duree:115, prix:1660, prixNormal:3320, acompte:0 },
+          { id:"lz1", groupe:"Zones populaires", nom:"Aisselles",          duree:15, prix:280,  prixNormal:400,  remise:30, sousTitre:"8 séances · soit 35 € la séance",     acompte:0 },
+          { id:"lz2", groupe:"Zones populaires", nom:"Maillot simple",     duree:25, prix:392,  prixNormal:560,  remise:30, sousTitre:"8 séances · soit 49 € la séance",     acompte:0 },
+          { id:"lz3", groupe:"Zones populaires", nom:"Maillot échancré",   duree:30, prix:532,  prixNormal:760,  remise:30, sousTitre:"8 séances · soit 66,50 € la séance",  acompte:0 },
+          { id:"lz4", groupe:"Zones populaires", nom:"Maillot intégral",   duree:35, prix:672,  prixNormal:960,  remise:30, sousTitre:"8 séances · soit 84 € la séance",     acompte:0 },
+          { id:"lz5", groupe:"Jambes",           nom:"Demi-jambes",        duree:20, prix:728,  prixNormal:1040, remise:30, sousTitre:"8 séances · soit 91 € la séance",     acompte:0 },
+          { id:"lz6", groupe:"Jambes",           nom:"Cuisses",            duree:20, prix:812,  prixNormal:1160, remise:30, sousTitre:"8 séances · soit 101,50 € la séance", acompte:0 },
+          { id:"lz7", groupe:"Jambes",           nom:"Jambes entières",    duree:30, prix:1176, prixNormal:1680, remise:30, sousTitre:"8 séances · soit 147 € la séance",    acompte:0 },
+          { id:"lz8", groupe:"Bras",             nom:"Avant-bras",         duree:15, prix:504,  prixNormal:720,  remise:30, sousTitre:"8 séances · soit 63 € la séance",     acompte:0 },
+          { id:"lz9", groupe:"Bras",             nom:"Bras entiers",       duree:25, prix:672,  prixNormal:960,  remise:30, sousTitre:"8 séances · soit 84 € la séance",     acompte:0 },
+          { id:"lz10", groupe:"Homme",           nom:"Dos",                duree:30, prix:672,  prixNormal:960,  remise:30, sousTitre:"8 séances · soit 84 € la séance",     acompte:0 },
+          { id:"lz11", groupe:"Homme",           nom:"Torse",              duree:25, prix:616,  prixNormal:880,  remise:30, sousTitre:"8 séances · soit 77 € la séance",     acompte:0 },
         ],
       },
       {
-        id: "laser_forfaits_zone", label: "Forfaits 8 séances par zone",
+        id: "laser_2z", label: "Forfaits 2 zones", badge: "–50 %", hint: "10 combinaisons",
+        note: "✨ Remise de 50 % sur la somme des deux zones, 8 séances par zone. Une autre combinaison est possible : le tarif se calcule de la même façon, demandez-la en consultation.",
         prestations: [
-          { id:"lfz1", nom:"Aisselles", duree:15, prix:360, acompte:0 },
-          { id:"lfz2", nom:"Maillot simple", duree:25, prix:560, acompte:0 },
-          { id:"lfz3", nom:"Maillot échancré", duree:30, prix:720, acompte:0 },
-          { id:"lfz4", nom:"Maillot intégral", duree:35, prix:880, acompte:0 },
-          { id:"lfz5", nom:"Demi-jambes", duree:20, prix:1120, acompte:0 },
-          { id:"lfz6", nom:"Jambes entières", duree:30, prix:2080, acompte:0 },
-          { id:"lfz7", nom:"Bras", duree:25, prix:1280, acompte:0 },
-          { id:"lfz8", nom:"Ligne ventrale", duree:10, prix:320, acompte:0 },
+          { id:"l2a", groupe:"Aisselles + maillot", nom:"Aisselles + Maillot simple",           duree:55, prix:480,  prixNormal:960,  remise:50, sousTitre:"8 séances · soit 60 € la séance",    acompte:0 },
+          { id:"l2b", groupe:"Aisselles + maillot", nom:"Aisselles + Maillot échancré",         duree:60, prix:580,  prixNormal:1160, remise:50, sousTitre:"8 séances · soit 72,50 € la séance", acompte:0 },
+          { id:"l2c", groupe:"Aisselles + maillot", nom:"Aisselles + Maillot intégral",         duree:65, prix:680,  prixNormal:1360, remise:50, sousTitre:"8 séances · soit 85 € la séance",    acompte:0 },
+          { id:"l2d", groupe:"Aisselles + jambes",  nom:"Aisselles + Demi-jambes",              duree:50, prix:720,  prixNormal:1440, remise:50, sousTitre:"8 séances · soit 90 € la séance",    acompte:0 },
+          { id:"l2e", groupe:"Aisselles + jambes",  nom:"Aisselles + Jambes entières",          duree:60, prix:1040, prixNormal:2080, remise:50, sousTitre:"8 séances · soit 130 € la séance",   acompte:0 },
+          { id:"l2f", groupe:"Maillot + jambes",    nom:"Maillot échancré + Demi-jambes",       duree:65, prix:900,  prixNormal:1800, remise:50, sousTitre:"8 séances · soit 112,50 € la séance", acompte:0 },
+          { id:"l2g", groupe:"Maillot + jambes",    nom:"Maillot intégral + Demi-jambes",       duree:70, prix:1000, prixNormal:2000, remise:50, sousTitre:"8 séances · soit 125 € la séance",   acompte:0 },
+          { id:"l2h", groupe:"Maillot + jambes",    nom:"Maillot intégral + Jambes entières",   duree:80, prix:1320, prixNormal:2640, remise:50, sousTitre:"8 séances · soit 165 € la séance",   acompte:0 },
+          { id:"l2i", groupe:"Haut du corps",       nom:"Aisselles + Bras entiers",             duree:55, prix:680,  prixNormal:1360, remise:50, sousTitre:"8 séances · soit 85 € la séance",    acompte:0 },
+          { id:"l2j", groupe:"Homme",               nom:"Dos + Torse",                          duree:70, prix:920,  prixNormal:1840, remise:50, sousTitre:"8 séances · soit 115 € la séance",   acompte:0 },
         ],
       },
       {
-        id: "laser_seances", label: "Séances à l'unité (retouches)",
+        id: "laser_3z", label: "Forfaits 3 zones", badge: "–50 %", hint: "8 combinaisons",
+        note: "✨ Remise de 50 % sur la somme des trois zones, 8 séances par zone. Une autre combinaison est possible : le tarif se calcule de la même façon, demandez-la en consultation.",
+        prestations: [
+          { id:"l3a", groupe:"Les plus demandés", nom:"Aisselles + Maillot intégral + Demi-jambes",      duree:95,  prix:1200, prixNormal:2400, remise:50, sousTitre:"8 séances · soit 150 € la séance",   acompte:0 },
+          { id:"l3b", groupe:"Les plus demandés", nom:"Aisselles + Maillot intégral + Jambes entières",  duree:105, prix:1520, prixNormal:3040, remise:50, sousTitre:"8 séances · soit 190 € la séance",   acompte:0 },
+          { id:"l3c", groupe:"Les plus demandés", nom:"Aisselles + Maillot simple + Demi-jambes",        duree:85,  prix:1000, prixNormal:2000, remise:50, sousTitre:"8 séances · soit 125 € la séance",   acompte:0 },
+          { id:"l3d", groupe:"Les plus demandés", nom:"Aisselles + Maillot échancré + Demi-jambes",      duree:90,  prix:1100, prixNormal:2200, remise:50, sousTitre:"8 séances · soit 137,50 € la séance", acompte:0 },
+          { id:"l3e", groupe:"Autres combinaisons", nom:"Aisselles + Maillot intégral + Cuisses",        duree:95,  prix:1260, prixNormal:2520, remise:50, sousTitre:"8 séances · soit 157,50 € la séance", acompte:0 },
+          { id:"l3f", groupe:"Autres combinaisons", nom:"Aisselles + Maillot échancré + Jambes entières", duree:100, prix:1420, prixNormal:2840, remise:50, sousTitre:"8 séances · soit 177,50 € la séance", acompte:0 },
+          { id:"l3g", groupe:"Autres combinaisons", nom:"Aisselles + Bras entiers + Maillot intégral",   duree:100, prix:1160, prixNormal:2320, remise:50, sousTitre:"8 séances · soit 145 € la séance",   acompte:0 },
+          { id:"l3h", groupe:"Homme",               nom:"Dos + Torse + Aisselles",                       duree:95,  prix:1120, prixNormal:2240, remise:50, sousTitre:"8 séances · soit 140 € la séance",   acompte:0 },
+        ],
+      },
+      {
+        id: "laser_seances", label: "Séance à l'unité", badge: "–30 %", hint: "retouches",
         note: "🔄 Séances à l'unité réservées aux retouches après un forfait.",
         prestations: [
-          { id:"ls1", nom:"Aisselles", duree:15, prix:45, acompte:0 },
-          { id:"ls2", nom:"Maillot simple", duree:25, prix:70, acompte:0 },
-          { id:"ls3", nom:"Maillot échancré", duree:30, prix:90, acompte:0 },
-          { id:"ls4", nom:"Maillot intégral", duree:35, prix:110, acompte:0 },
-          { id:"ls5", nom:"Demi-jambes", duree:20, prix:140, acompte:0 },
-          { id:"ls6", nom:"Jambes entières", duree:30, prix:260, acompte:0 },
-          { id:"ls7", nom:"Bras", duree:25, prix:160, acompte:0 },
-          { id:"ls8", nom:"Ligne ventrale", duree:10, prix:40, acompte:0 },
+          { id:"ls1", groupe:"Zones populaires", nom:"Aisselles",        duree:15, prix:35,     prixNormal:50,  remise:30, acompte:0 },
+          { id:"ls2", groupe:"Zones populaires", nom:"Maillot simple",   duree:25, prix:49,     prixNormal:70,  remise:30, acompte:0 },
+          { id:"ls3", groupe:"Zones populaires", nom:"Maillot échancré", duree:30, prix:66.50,  prixNormal:95,  remise:30, acompte:0 },
+          { id:"ls4", groupe:"Zones populaires", nom:"Maillot intégral", duree:35, prix:84,     prixNormal:120, remise:30, acompte:0 },
+          { id:"ls5", groupe:"Jambes",           nom:"Demi-jambes",      duree:20, prix:91,     prixNormal:130, remise:30, acompte:0 },
+          { id:"ls6", groupe:"Jambes",           nom:"Cuisses",          duree:20, prix:101.50, prixNormal:145, remise:30, acompte:0 },
+          { id:"ls7", groupe:"Jambes",           nom:"Jambes entières",  duree:30, prix:147,    prixNormal:210, remise:30, acompte:0 },
+          { id:"ls8", groupe:"Bras",             nom:"Avant-bras",       duree:15, prix:63,     prixNormal:90,  remise:30, acompte:0 },
+          { id:"ls9", groupe:"Bras",             nom:"Bras entiers",     duree:25, prix:84,     prixNormal:120, remise:30, acompte:0 },
+          { id:"ls10", groupe:"Homme",           nom:"Dos",              duree:30, prix:84,     prixNormal:120, remise:30, acompte:0 },
+          { id:"ls11", groupe:"Homme",           nom:"Torse",            duree:25, prix:77,     prixNormal:110, remise:30, acompte:0 },
         ],
       },
     ],
@@ -643,7 +672,7 @@ function AuthModal({onAuth,onClose,booking}) {
     <div className="fi" style={{position:"fixed",inset:0,zIndex:500,display:"flex",alignItems:"flex-end",background:"rgba(38,25,14,.42)",backdropFilter:"blur(6px)"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="su" style={{width:"100%",maxHeight:"92vh",overflowY:"auto",background:C.surface,borderRadius:"24px 24px 0 0",padding:"28px 24px 52px",boxShadow:"0 -8px 40px rgba(0,0,0,.1)"}}>
         <div style={{width:36,height:4,borderRadius:2,background:C.border,margin:"0 auto 28px"}}/>
-        {booking&&(<div style={{background:C.accentLight,borderRadius:14,padding:"14px 18px",marginBottom:24,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:14,fontWeight:600,color:C.accentDark}}>{booking.nom}</div><div style={{fontSize:12,color:C.textMid,marginTop:2}}>{fmtLong(booking.date)} · {booking.slot}</div></div><div style={{fontSize:16,fontWeight:700,color:C.accentDark}}>{booking.prix>0?`${booking.prix} €`:"Gratuit"}</div></div>)}
+        {booking&&(<div style={{background:C.accentLight,borderRadius:14,padding:"14px 18px",marginBottom:24,display:"flex",justifyContent:"space-between",alignItems:"center"}}><div><div style={{fontSize:14,fontWeight:600,color:C.accentDark}}>{booking.nom}</div><div style={{fontSize:12,color:C.textMid,marginTop:2}}>{fmtLong(booking.date)} · {booking.slot}</div></div><div style={{fontSize:16,fontWeight:700,color:C.accentDark}}>{booking.prix>0?fmtEuro(booking.prix):"Gratuit"}</div></div>)}
         <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,marginBottom:4}}>{mode==="login"?"Connexion":"Créer un compte"}</div>
         <div style={{fontSize:13,color:C.textMid,marginBottom:22}}>{mode==="login"?"Vos infos seront pré-remplies automatiquement.":"Un compte pour gérer vos rendez-vous."}</div>
         <div style={{display:"flex",background:C.surfaceAlt,borderRadius:10,padding:4,marginBottom:20}}>
@@ -920,25 +949,38 @@ function ReservationView({session,allRdvs,clientRdvs,onBooked,laserUnlocked,onAu
               return (
                 <div key={sub.id} style={{borderRadius:14,border:`1.5px solid ${isOpen?C.accent:C.border}`,overflow:"hidden",background:C.surface,transition:"all .2s"}}>
                   <div onClick={()=>setOpenSub(isOpen?null:sub.id)} style={{padding:"16px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",background:isOpen?C.accentLight:"transparent",transition:"background .2s"}}>
-                    <span style={{fontSize:15,fontWeight:isOpen?600:500,color:isOpen?C.accentDark:C.text}}>{sub.label}</span>
-                    <span style={{color:isOpen?C.accent:C.textLight,fontSize:18,transition:"transform .2s",display:"inline-block",transform:isOpen?"rotate(180deg)":"rotate(0deg)"}}>⌄</span>
+                    <div style={{minWidth:0,display:"flex",flexDirection:"column",gap:3}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                        <span style={{fontSize:15,fontWeight:isOpen?600:500,color:isOpen?C.accentDark:C.text}}>{sub.label}</span>
+                        {sub.badge&&<span style={{fontSize:10,fontWeight:700,letterSpacing:.5,color:"#fff",background:"#e07070",padding:"3px 8px",borderRadius:9,whiteSpace:"nowrap"}}>{sub.badge}</span>}
+                      </div>
+                      {sub.hint&&<span style={{fontSize:11,color:C.textLight,letterSpacing:.2}}>{sub.hint}</span>}
+                    </div>
+                    <span style={{color:isOpen?C.accent:C.textLight,fontSize:18,transition:"transform .2s",display:"inline-block",transform:isOpen?"rotate(180deg)":"rotate(0deg)",flexShrink:0,marginLeft:10}}>⌄</span>
                   </div>
                   {isOpen&&(
                     <div>
                       {sub.note&&<div style={{padding:"10px 18px",background:C.warn,borderBottom:`1px solid ${C.warnBorder}`,fontSize:12,color:C.warnText,lineHeight:1.6}}>{sub.note}</div>}
                       {sub.prestations.map((p,i)=>{
                         const active=selPrestas.some(e=>e.key===prestaKey(svcId,sub.id,p));
+                        // Avec 11 zones et 18 combinaisons, on coupe la liste en familles
+                        // (Zones populaires / Jambes / Bras / Homme…) pour rester lisible.
+                        const newGrp=p.groupe&&p.groupe!==sub.prestations[i-1]?.groupe?p.groupe:null;
                         return (
-                          <div key={p.id} onClick={()=>!p.devis&&selectPresta(p,sub)} style={{padding:"14px 18px",borderTop:i>0?`1px solid ${C.borderLight}`:"none",display:"flex",justifyContent:"space-between",alignItems:"center",background:active?C.accentLight:"transparent",cursor:p.devis?"default":"pointer",transition:"background .15s"}}>
-                            <div style={{minWidth:0}}>
-                              <div style={{fontSize:14,fontWeight:active?600:400,color:active?C.accentDark:C.text,display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>{p.nom}{active&&<span style={{fontSize:10,fontWeight:600,background:C.accent,color:"#fff",padding:"2px 7px",borderRadius:9,letterSpacing:.3}}>✓ Ajoutée</span>}</div>
+                          <Fragment key={p.id}>
+                          {newGrp&&<div style={{padding:"9px 18px",background:C.surfaceAlt,borderTop:i>0?`1px solid ${C.borderLight}`:"none",fontSize:9.5,letterSpacing:1.4,textTransform:"uppercase",color:C.textLight,fontWeight:600}}>{newGrp}</div>}
+                          <div onClick={()=>!p.devis&&selectPresta(p,sub)} style={{padding:"14px 18px",borderTop:i>0&&!newGrp?`1px solid ${C.borderLight}`:"none",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,background:active?C.accentLight:"transparent",cursor:p.devis?"default":"pointer",transition:"background .15s"}}>
+                            <div style={{minWidth:0,flex:1}}>
+                              <div style={{fontSize:14,fontWeight:active?600:400,color:active?C.accentDark:C.text,display:"flex",alignItems:"center",gap:7,flexWrap:"wrap",lineHeight:1.35}}>{p.nom}{active&&<span style={{fontSize:10,fontWeight:600,background:C.accent,color:"#fff",padding:"2px 7px",borderRadius:9,letterSpacing:.3}}>✓ Ajoutée</span>}</div>
                               <div style={{fontSize:12,color:"#a090c0",marginTop:2}}>{p.duree} min</div>
+                              {p.sousTitre&&<div style={{fontSize:11,color:C.textLight,marginTop:3,lineHeight:1.4}}>{p.sousTitre}</div>}
                               {p.apartir&&<div style={{fontSize:11,color:C.lockedText,marginTop:3,lineHeight:1.4,maxWidth:210}}>Devis selon le motif choisi — tarif confirmé ensemble avant le RDV</div>}
                             </div>
                             <div style={{textAlign:"right",flexShrink:0}}>
-                              {p.devis?<span style={{fontSize:14,fontWeight:600,color:C.lockedText}}>Sur devis</span>:<>{p.apartir&&<div style={{fontSize:10,color:C.textLight,letterSpacing:.3,marginBottom:1}}>à partir de</div>}{p.prixNormal&&<div style={{fontSize:11,color:C.textLight,textDecoration:"line-through",marginBottom:1}}>{p.prixNormal} €</div>}<div style={{fontSize:15,fontWeight:700,color:p.prixNormal?"#e07070":active?C.accentDark:C.textMid}}>{p.prix} €</div>{p.prixNormal&&<div style={{fontSize:10,color:"#e07070",fontWeight:700,letterSpacing:.5}}>-50%</div>}</>}
+                              {p.devis?<span style={{fontSize:14,fontWeight:600,color:C.lockedText}}>Sur devis</span>:<>{p.apartir&&<div style={{fontSize:10,color:C.textLight,letterSpacing:.3,marginBottom:1}}>à partir de</div>}{p.prixNormal&&<div style={{fontSize:11,color:C.textLight,textDecoration:"line-through",marginBottom:1}}>{fmtEuro(p.prixNormal)}</div>}<div style={{fontSize:15,fontWeight:700,color:p.prixNormal?"#e07070":active?C.accentDark:C.textMid}}>{fmtEuro(p.prix)}</div>{p.prixNormal&&<div style={{fontSize:10,color:"#e07070",fontWeight:700,letterSpacing:.5}}>−{p.remise||50} %</div>}</>}
                             </div>
                           </div>
+                          </Fragment>
                         );
                       })}
                     </div>
@@ -962,14 +1004,14 @@ function ReservationView({session,allRdvs,clientRdvs,onBooked,laserUnlocked,onAu
               <div style={{width:3,alignSelf:"stretch",minHeight:26,borderRadius:2,background:e.color,flexShrink:0}}/>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:13,fontWeight:600,color:C.text}}>{e.presta.nom}</div>
-                <div style={{fontSize:11,color:C.textLight,marginTop:1}}>{e.subLabel} · {e.presta.duree} min · {e.presta.prix>0?`${e.presta.prix} €`:"Offert"}</div>
+                <div style={{fontSize:11,color:C.textLight,marginTop:1}}>{e.subLabel} · {e.presta.duree} min · {e.presta.prix>0?fmtEuro(e.presta.prix):"Offert"}</div>
               </div>
               <button onClick={()=>removeFromPanier(e.key)} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:7,color:C.textLight,fontSize:13,lineHeight:1,padding:"5px 9px",cursor:"pointer",flexShrink:0}}>✕</button>
             </div>
           ))}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12,paddingTop:11,borderTop:`1px solid ${C.borderLight}`}}>
             <span style={{fontSize:12,color:C.textMid}}>{fmtDuree(selPresta.duree)} au total</span>
-            <span style={{fontSize:16,fontWeight:700,color:C.accentDark}}>{selPresta.prix>0?`${selPresta.prix} €`:"Offert"}</span>
+            <span style={{fontSize:16,fontWeight:700,color:C.accentDark}}>{selPresta.prix>0?fmtEuro(selPresta.prix):"Offert"}</span>
           </div>
           {panierHasLaser
             ? <div style={{fontSize:11,color:C.lockedText,marginTop:12,lineHeight:1.6,padding:"10px 12px",background:C.locked+"44",border:`1px solid ${C.locked}`,borderRadius:10}}>🔒 Les prestations laser se réservent seules, sans autre soin sur le même créneau.</div>
@@ -993,13 +1035,13 @@ function ReservationView({session,allRdvs,clientRdvs,onBooked,laserUnlocked,onAu
                     <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:3}}>{e.presta.nom}</div>
                     <div style={{fontSize:12,color:C.textMid}}>{e.subLabel} · {e.presta.duree} min</div>
                   </div>
-                  <div style={{fontSize:15,fontWeight:600,color:C.textMid,flexShrink:0}}>{e.presta.prix>0?`${e.presta.prix} €`:"Offert"}</div>
+                  <div style={{fontSize:15,fontWeight:600,color:C.textMid,flexShrink:0}}>{e.presta.prix>0?fmtEuro(e.presta.prix):"Offert"}</div>
                 </div>
               ))}
               {selPrestas.length>1&&(
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:14,paddingTop:12,borderTop:`1.5px solid ${C.border}`}}>
                   <div><div style={{fontSize:14,fontWeight:700,color:C.text}}>Total</div><div style={{fontSize:12,color:C.textLight,marginTop:2}}>Durée cumulée : {fmtDuree(selPresta.duree)}</div></div>
-                  <div style={{fontSize:19,fontWeight:700,color:C.accentDark}}>{selPresta.prix>0?`${selPresta.prix} €`:"Offert"}</div>
+                  <div style={{fontSize:19,fontWeight:700,color:C.accentDark}}>{selPresta.prix>0?fmtEuro(selPresta.prix):"Offert"}</div>
                 </div>
               )}
             </div>
@@ -1184,7 +1226,7 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs,
           <div style={{textAlign:"center",paddingBottom:isUpcoming?14:0,borderBottom:isUpcoming?`1px solid ${C.borderLight}`:"none",marginBottom:isUpcoming?14:0}}>
             <div style={{fontSize:18,fontWeight:500,color:C.text,marginBottom:6}}>{r.prestation}</div>
             <div style={{fontSize:14,color:C.accent}}>{fmtLong(r.date)} · {r.slot}</div>
-            <div style={{fontSize:13,color:C.textLight,marginTop:4}}>{r.prix} €</div>
+            <div style={{fontSize:13,color:C.textLight,marginTop:4}}>{fmtEuro(r.prix)}</div>
             {r.statut==="annulé"&&<div style={{fontSize:12,color:"#c05050",marginTop:6}}>Annulé</div>}
           </div>
           {isUpcoming&&<AdresseBlock/>}
@@ -1279,7 +1321,7 @@ function PlanningAdmin({rdvs}) {
                   <div style={{fontSize:13,fontWeight:600,color:C.text}}>{r.client_prenom} {r.client_nom}</div>
                   <div style={{fontSize:11,color:C.textMid,marginTop:1}}>{r.prestation} · {r.duree}min</div>
                 </div>
-                <div style={{fontSize:12,fontWeight:700,color:"#e09050"}}>{r.prix}€</div>
+                <div style={{fontSize:12,fontWeight:700,color:"#e09050"}}>{fmtEuro(r.prix)}</div>
               </div>
             );
           }
@@ -1340,7 +1382,7 @@ function AdminCreateRdvView({allRdvs,profs,onCreated}) {
       <Lbl>Service</Lbl>
       <select value={svcId} onChange={e=>{setSvcId(e.target.value);setSubId("");setPrestaId("");}} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14,marginBottom:12}}><option value="">— Choisir un service —</option>{SERVICES.map(s=>(<option key={s.id} value={s.id}>{s.label}</option>))}</select>
       {svc&&(<select value={subId} onChange={e=>{setSubId(e.target.value);setPrestaId("");}} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14,marginBottom:12}}><option value="">— Choisir une sous-catégorie —</option>{svc.subcats.map(s=>(<option key={s.id} value={s.id}>{s.label}</option>))}</select>)}
-      {sub&&(<select value={prestaId} onChange={e=>setPrestaId(e.target.value)} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14,marginBottom:18}}><option value="">— Choisir une prestation —</option>{sub.prestations.map(p=>(<option key={p.id} value={p.id}>{p.nom} — {p.duree}min — {p.prix?p.prix+"€":"Sur devis"}</option>))}</select>)}
+      {sub&&(<select value={prestaId} onChange={e=>setPrestaId(e.target.value)} style={{width:"100%",padding:"13px 16px",background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:10,color:C.text,fontSize:14,marginBottom:18}}><option value="">— Choisir une prestation —</option>{sub.prestations.map(p=>(<option key={p.id} value={p.id}>{p.nom} — {p.duree}min — {p.prix?fmtEuro(p.prix):"Sur devis"}</option>))}</select>)}
       <Lbl>Date</Lbl>
       <Inp type="date" value={date} min={todayStr()} onChange={e=>{setDate(e.target.value);setSlot("");}} style={{marginBottom:16}}/>
       {presta&&(<><Lbl>Créneau (durée {presta.duree} min)</Lbl><div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:18}}>{ALL_SLOTS.map(s=>{const isTaken=takenSlots.has(s);const fits=!isTaken&&slotFitsDuration(s);const active=slot===s;const disabled=isTaken||!fits;return(<div key={s} onClick={()=>!disabled&&setSlot(s)} style={{padding:"11px 4px",textAlign:"center",borderRadius:10,border:`1.5px solid ${active?C.accent:C.border}`,background:active?C.accent:disabled?"#2a1010":C.surface,color:active?"#fff":disabled?"#7a4040":C.textMid,fontSize:13,fontWeight:active?700:400,cursor:disabled?"default":"pointer",transition:"all .15s",textDecoration:isTaken?"line-through":"none"}}>{s}</div>);})}
@@ -1459,7 +1501,7 @@ function RdvRow({
             <div onClick={()=>openHistory&&openHistory(r)} style={{fontSize:12,color:C.accentDark,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,borderBottom:`1px dotted ${C.border}`,paddingBottom:1}}>{r.client_prenom} {r.client_nom} · {r.client_tel}<span style={{fontSize:10,color:C.textLight}}>›</span></div>
           </div>
           <div style={{textAlign:"right",display:"flex",alignItems:"center",gap:8}}>
-            <div style={{fontSize:14,fontWeight:700,color:C.textMid}}>{r.prix} €</div>
+            <div style={{fontSize:14,fontWeight:700,color:C.textMid}}>{fmtEuro(r.prix)}</div>
             {r.statut!=="annulé"&&<button onClick={()=>{setEditingId(isEditing?null:r.id);setEditPrix(String(r.prix));setEditPresta(r.prestation);setEditDate(r.date);setEditSlot(r.slot);}} style={{fontSize:11,color:C.textLight,background:"none",border:`1px solid ${C.border}`,borderRadius:7,padding:"3px 8px",cursor:"pointer"}}>{isEditing?"✕":"✏️"}</button>}
           </div>
         </div>
@@ -1796,18 +1838,18 @@ export default function App() {
             {session?(<div style={{textAlign:"right"}}><div style={{fontSize:13,fontWeight:500,color:C.textMid}}>{session.profile?.prenom}</div><button onClick={handleLogout} style={{fontSize:11,color:C.textLight,background:"none",border:"none",cursor:"pointer",marginTop:2}}>Déconnexion</button></div>):(<button onClick={()=>setShowLoginModal(true)} style={{fontSize:13,color:"#d4c4e8",background:"none",border:`1px solid ${C.border}`,borderRadius:20,padding:"8px 16px",cursor:"pointer"}}>Se connecter</button>)}
           </div>
           <p style={{fontSize:15,color:"#d4c4ec",marginTop:10,lineHeight:1.7,letterSpacing:.5,fontStyle:"italic"}}>Votre adresse beauté à la Cartoucherie · Ongles · Laser · Bronzage</p>
-          <div style={{display:"flex",gap:12,marginTop:12,alignItems:"center"}}>
-            <a href="https://www.instagram.com/neylika31/" target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,textDecoration:"none"}}>
+          <div style={{display:"flex",gap:12,marginTop:12,alignItems:"center",flexWrap:"wrap"}}>
+            <a href="https://www.instagram.com/neylika31/" target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,textDecoration:"none",flexShrink:0}}>
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="2" y="2" width="20" height="20" rx="6" stroke="#c9a0c0" strokeWidth="1.5"/><circle cx="12" cy="12" r="4" stroke="#c9a0c0" strokeWidth="1.5"/><circle cx="17.5" cy="6.5" r="1" fill="#c9a0c0"/></svg>
-              <span style={{fontSize:16,color:C.accent,letterSpacing:.5,fontWeight:500}}>@neylika31</span>
+              <span style={{fontSize:16,color:C.accent,letterSpacing:.5,fontWeight:500,whiteSpace:"nowrap"}}>@neylika31</span>
             </a>
-            <a href="https://ig.me/m/neylika31" target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,textDecoration:"none",background:C.accentLight,border:`1px solid ${C.accent}`,borderRadius:20,padding:"5px 12px"}}>
+            <a href="https://ig.me/m/neylika31" target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,textDecoration:"none",background:C.accentLight,border:`1px solid ${C.accent}`,borderRadius:20,padding:"5px 12px",flexShrink:0}}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.96 9.96 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z" stroke="#c9a0c0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="8.5" cy="12" r="1" fill="#c9a0c0"/><circle cx="12" cy="12" r="1" fill="#c9a0c0"/><circle cx="15.5" cy="12" r="1" fill="#c9a0c0"/></svg>
-              <span style={{fontSize:12,color:C.accent}}>Me contacter</span>
+              <span style={{fontSize:12,color:C.accent,whiteSpace:"nowrap"}}>Me contacter</span>
             </a>
-            <a href="sms:+33680894349" style={{display:"inline-flex",alignItems:"center",gap:6,textDecoration:"none",background:C.accentLight,border:`1px solid ${C.accent}`,borderRadius:20,padding:"5px 12px"}}>
+            <a href="sms:+33680894349" style={{display:"inline-flex",alignItems:"center",gap:6,textDecoration:"none",background:C.accentLight,border:`1px solid ${C.accent}`,borderRadius:20,padding:"5px 12px",flexShrink:0}}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="#c9a0c0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              <span style={{fontSize:12,color:C.accent}}>06 80 89 43 49</span>
+              <span style={{fontSize:12,color:C.accent,whiteSpace:"nowrap"}}>06 80 89 43 49</span>
             </a>
           </div>
         </div>
