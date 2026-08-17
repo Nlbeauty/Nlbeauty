@@ -367,6 +367,21 @@ async function ensureFreshSession(sess) {
   } catch { return sess; }
 }
 
+// ─── IDENTIFICATION D'UNE CLIENTE ─────────────────────────────────────────────
+// Les RDV pris en ligne portent un user_id, ceux créés à la main depuis l'admin non.
+// On rapproche donc par compte quand les deux en ont un, et par téléphone sinon,
+// pour qu'une même cliente ne se retrouve pas avec deux historiques séparés.
+const telKey = (t) => String(t || "").replace(/\D/g, "").slice(-9);
+const sameClient = (a, b) =>
+  (a.user_id && b.user_id) ? a.user_id === b.user_id
+  : (!!telKey(a.client_tel) && telKey(a.client_tel) === telKey(b.client_tel));
+
+// Les montants sont en décimal depuis la base : on masque les centimes inutiles.
+const fmtEuro = (n) => {
+  const v = Number(n || 0);
+  return (Number.isInteger(v) ? String(v) : v.toFixed(2).replace(".", ",")) + " €";
+};
+
 function todayStr() { return new Date().toISOString().split("T")[0]; }
 function parseD(s) { const [y,m,d]=s.split("-"); return new Date(+y,+m-1,+d); }
 function fmtLong(s) { const d=parseD(s); return `${DAYS_L[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
@@ -1339,6 +1354,89 @@ function AdminCreateRdvView({allRdvs,profs,onCreated}) {
 // ── ROW RDV ADMIN — défini hors d'AdminView pour respecter les règles React ──
 // (sinon la fonction est recréée à chaque render, React démonte/remonte le champ
 // à chaque frappe et le clavier mobile se ferme après chaque lettre)
+// ─── HISTORIQUE D'UNE CLIENTE ─────────────────────────────────────────────────
+// Panneau ouvert depuis n'importe quel rendez-vous. Il ne fait aucune requête :
+// tous les RDV sont déjà chargés côté admin, l'affichage est donc immédiat.
+function ClientHistory({ rdv, allRdvs, svcColor, onClose }) {
+  const hist = (allRdvs || [])
+    .filter(r => sameClient(r, rdv))
+    .sort((a, b) => (b.date + b.slot).localeCompare(a.date + a.slot));
+  const today = todayStr();
+  const honores = hist.filter(r => r.statut !== "annulé" && r.date < today);
+  const avenir  = hist.filter(r => r.statut !== "annulé" && r.date >= today);
+  const annules = hist.filter(r => r.statut === "annulé");
+  const ca = honores.reduce((s, r) => s + Number(r.prix || 0), 0);
+  const panier = honores.length ? ca / honores.length : 0;
+  const premiere = honores.length ? honores[honores.length - 1].date : null;
+  // Prestation la plus fréquente : utile pour reprendre une habitude sans chercher.
+  const compte = {};
+  honores.forEach(r => { compte[r.prestation] = (compte[r.prestation] || 0) + 1; });
+  const favorite = Object.entries(compte).sort((a, b) => b[1] - a[1])[0];
+
+  const Ligne = ({ r, pale }) => (
+    <div style={{ display: "flex", gap: 11, padding: "11px 0", borderBottom: `1px solid ${C.borderLight}`, opacity: pale ? .45 : 1 }}>
+      <div style={{ width: 3, alignSelf: "stretch", borderRadius: 2, background: svcColor(r.cat_id), flexShrink: 0 }} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, color: C.text, fontWeight: 500 }}>{r.prestation}</div>
+        <div style={{ fontSize: 11, color: C.textLight, marginTop: 2 }}>
+          {fmtLong(r.date)} · {r.slot}{r.statut === "annulé" && <span style={{ color: "#c07070" }}> · annulé</span>}
+        </div>
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: C.textMid, flexShrink: 0 }}>{fmtEuro(r.prix)}</div>
+    </div>
+  );
+
+  const Stat = ({ val, lbl }) => (
+    <div style={{ flex: 1, textAlign: "center", padding: "10px 4px" }}>
+      <div style={{ fontSize: 18, fontWeight: 700, color: C.accentDark }}>{val}</div>
+      <div style={{ fontSize: 10, color: C.textLight, marginTop: 3, letterSpacing: .3 }}>{lbl}</div>
+    </div>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(30,22,34,.55)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: C.bg, width: "100%", maxWidth: 560, maxHeight: "88vh", overflowY: "auto", borderRadius: "18px 18px 0 0", padding: "20px 20px 32px", boxShadow: "0 -6px 30px rgba(0,0,0,.2)" }}>
+        <div style={{ width: 38, height: 4, borderRadius: 2, background: C.border, margin: "0 auto 16px" }} />
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 21, color: C.text }}>{rdv.client_prenom} {rdv.client_nom}</div>
+            <div style={{ fontSize: 12, color: C.textLight, marginTop: 3 }}>{rdv.client_tel}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textLight, fontSize: 15, padding: "5px 10px", cursor: "pointer", flexShrink: 0 }}>✕</button>
+        </div>
+
+        <div style={{ display: "flex", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, marginTop: 16 }}>
+          <Stat val={honores.length} lbl="VISITES" />
+          <div style={{ width: 1, background: C.borderLight }} />
+          <Stat val={fmtEuro(ca)} lbl="TOTAL DÉPENSÉ" />
+          <div style={{ width: 1, background: C.borderLight }} />
+          <Stat val={fmtEuro(Math.round(panier))} lbl="PANIER MOYEN" />
+        </div>
+
+        {(premiere || favorite || annules.length > 0) && (
+          <div style={{ fontSize: 12, color: C.textMid, lineHeight: 1.8, marginTop: 12, padding: "11px 14px", background: C.surfaceAlt, borderRadius: 10 }}>
+            {premiere && <div>Cliente depuis le {fmtLong(premiere)}</div>}
+            {favorite && <div>Prestation habituelle : {favorite[0]} ({favorite[1]}×)</div>}
+            {annules.length > 0 && <div>{annules.length} annulation{annules.length > 1 ? "s" : ""}</div>}
+          </div>
+        )}
+
+        <a href={`sms:${rdv.client_tel}`} style={{ display: "block", textAlign: "center", marginTop: 14, padding: "12px", borderRadius: 10, background: C.accentLight, border: `1px solid ${C.accent}`, color: C.accentDark, fontSize: 13, fontWeight: 600, textDecoration: "none" }}>💬 Envoyer un message</a>
+
+        {avenir.length > 0 && (<>
+          <div style={{ fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: C.textLight, margin: "22px 0 4px" }}>À venir</div>
+          {avenir.map(r => <Ligne key={r.id} r={r} />)}
+        </>)}
+
+        <div style={{ fontSize: 10, letterSpacing: 1.5, textTransform: "uppercase", color: C.textLight, margin: "22px 0 4px" }}>Historique</div>
+        {honores.length === 0 && annules.length === 0
+          ? <div style={{ fontSize: 13, color: C.textLight, padding: "14px 0" }}>Première visite — aucun rendez-vous passé.</div>
+          : hist.filter(r => r.date < today || r.statut === "annulé").map(r => <Ligne key={r.id} r={r} pale={r.statut === "annulé"} />)}
+      </div>
+    </div>
+  );
+}
+
 function RdvRow({
   r, allRdvsAdmin, svcColor, getPromoFor, ALL_SLOTS_ADMIN,
   editingId, setEditingId,
@@ -1346,7 +1444,7 @@ function RdvRow({
   editPrix, setEditPrix,
   editDate, setEditDate,
   editSlot, setEditSlot,
-  editSaving, saveEdit, cancel,
+  editSaving, saveEdit, cancel, openHistory,
 }) {
   const isEditing=editingId===r.id;
   const smsUrl=`sms:${r.client_tel}`;
@@ -1358,7 +1456,7 @@ function RdvRow({
         <div style={{display:"flex",justifyContent:"space-between",flexWrap:"wrap",gap:6}}>
           <div>
             <div style={{fontSize:14,fontWeight:600,color:C.text,marginBottom:2,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>{r.prestation}{(()=>{const promo=getPromoFor(r);if(!promo)return null;return(<span style={{fontSize:10,fontWeight:700,background:"#3a2848",color:"#f0c060",padding:"2px 8px",borderRadius:10,letterSpacing:.3}}>🎁 -{promo.remise}€ ({promo.nb}e)</span>);})()}</div>
-            <div style={{fontSize:12,color:C.textMid}}>{r.client_prenom} {r.client_nom} · {r.client_tel}</div>
+            <div onClick={()=>openHistory&&openHistory(r)} style={{fontSize:12,color:C.accentDark,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,borderBottom:`1px dotted ${C.border}`,paddingBottom:1}}>{r.client_prenom} {r.client_nom} · {r.client_tel}<span style={{fontSize:10,color:C.textLight}}>›</span></div>
           </div>
           <div style={{textAlign:"right",display:"flex",alignItems:"center",gap:8}}>
             <div style={{fontSize:14,fontWeight:700,color:C.textMid}}>{r.prix} €</div>
@@ -1467,6 +1565,8 @@ function AdminView({onExit}) {
   const [editDate,setEditDate]=useState("");
   const [editSlot,setEditSlot]=useState("");
   const [editSaving,setEditSaving]=useState(false);
+  // Rendez-vous dont on affiche l'historique cliente (null = panneau fermé).
+  const [historyRdv,setHistoryRdv]=useState(null);
   const ALL_SLOTS_ADMIN=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];
   const saveEdit=async(r)=>{
     setEditSaving(true);
@@ -1538,7 +1638,7 @@ function AdminView({onExit}) {
     editPrix, setEditPrix,
     editDate, setEditDate,
     editSlot, setEditSlot,
-    editSaving, saveEdit, cancel,
+    editSaving, saveEdit, cancel, openHistory:setHistoryRdv,
   };
   return (
     <div style={{maxWidth:560,margin:"0 auto",padding:"0 20px 100px"}}>
@@ -1556,6 +1656,7 @@ function AdminView({onExit}) {
           <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 14px"}}><div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:22,color:C.text,marginBottom:4}}>{nbRdvAVenir}</div><div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight}}>RDV à venir</div></div>
         </div>
       </div>
+      {historyRdv&&<ClientHistory rdv={historyRdv} allRdvs={rdvs} svcColor={svcColor} onClose={()=>setHistoryRdv(null)}/>}
       <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,marginBottom:24,overflowX:"auto"}}>
         {[["today","Aujourd'hui"],["upcoming","À venir"],["all","Tous"],["create","+ Créer RDV"],["planning","Planning"],["ca","CA mensuel"],["laser","Laser 🔒"]].map(([id,label])=>(<button key={id} onClick={()=>setTab(id)} style={{flexShrink:0,padding:"11px 10px",background:"none",border:"none",borderBottom:`2px solid ${tab===id?C.accent:"transparent"}`,color:tab===id?C.accentDark:C.textLight,fontSize:11,fontWeight:tab===id?600:400,marginBottom:-1,letterSpacing:.3,cursor:"pointer"}}>{label}</button>))}
       </div>
