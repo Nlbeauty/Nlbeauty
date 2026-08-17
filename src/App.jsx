@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 
 const SUPA_URL = "https://xpackkiprznsrotsohce.supabase.co";
 const SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhwYWNra2lwcnpuc3JvdHNvaGNlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU2NTkzMTIsImV4cCI6MjA5MTIzNTMxMn0.BBZzEnIkHfGcrMPoRa8cMp3_KKrlFAnsg8lXQijC9dA";
@@ -100,6 +100,23 @@ const sendCancelEmail = async (rdv) => {
   const dateFr = `${JOURS[dateObj.getDay()]} ${dateObj.getDate()} ${MOIS[dateObj.getMonth()]} ${dateObj.getFullYear()}`;
   const params = { client_prenom: rdv.client_prenom||"", client_nom: rdv.client_nom||"", client_tel: rdv.client_tel||"", client_email: rdv.client_email||"", prestation: rdv.prestation, date: dateFr, slot: rdv.slot||"", prix: rdv.prix||0, to_email: rdv.client_email };
   try { await fetch("https://api.emailjs.com/api/v1.0/email/send", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ service_id: EJS_SERVICE, template_id: EJS_TPL_PRO, user_id: EJS_KEY, template_params: params }) }); } catch(e) { console.log("Cancel email error:", e); }
+};
+
+// ─── DÉTECTION D'ERREUR SUPABASE ──────────────────────────────────────────────
+// PostgREST renvoie ses erreurs sous la forme {code, message, details, hint} —
+// PAS sous la forme {error:...}. L'ancien code testait "res.error", qui n'existe
+// jamais : une écriture refusée (mauvais type, droits manquants) passait donc
+// inaperçue et l'écran affichait quand même la nouvelle valeur.
+// Un tableau vide signifie "aucune ligne modifiée" (RLS a bloqué sans erreur HTTP).
+const supaError = (res) => {
+  if (res === null || res === undefined) return "Aucune réponse du serveur.";
+  if (Array.isArray(res)) return res.length === 0 ? "Aucune ligne modifiée — session expirée ou droits insuffisants." : null;
+  if (res.code || res.message) {
+    if (res.code === "23505") return "Un rendez-vous existe déjà à cet horaire.";
+    if (res.code === "22P02" || res.code === "22003") return "Valeur invalide (vérifiez le format du montant).";
+    return res.message || `Erreur ${res.code}`;
+  }
+  return null;
 };
 
 const NTFY_TOPIC = "neylika-rdv-q8mk3xfp7vwn";
@@ -320,6 +337,14 @@ const SERVICES = [
 const MONTHS = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 const DAYS_S = ["Lun","Mar","Mer","Jeu","Ven","Sam","Dim"];
 const DAYS_L = ["Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"];
+
+// Une durée cumulée peut dépasser l'heure : "150" se lit mieux en "2h30".
+function fmtDuree(min) {
+  const h = Math.floor(min / 60), m = min % 60;
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h${String(m).padStart(2, "0")}`;
+}
 
 function todayStr() { return new Date().toISOString().split("T")[0]; }
 function parseD(s) { const [y,m,d]=s.split("-"); return new Date(+y,+m-1,+d); }
@@ -696,7 +721,35 @@ function AdresseBlock(){
 }
 
 function ReservationView({session,allRdvs,clientRdvs,onBooked,laserUnlocked,onAuth}) {
-  const [svcId,setSvcId]=useState(null);const [openSub,setOpenSub]=useState(null);const [selPresta,setSelPresta]=useState(null);
+  const [svcId,setSvcId]=useState(null);const [openSub,setOpenSub]=useState(null);
+  // ─── PANIER — plusieurs prestations sur un seul rendez-vous ─────────────────
+  // Chaque entrée : {key, presta, svcId, svcLabel, subLabel, color}
+  // La clé combine service+sous-catégorie+prestation car les identifiants de
+  // prestation ne sont PAS uniques (ex: "sp1" existe en semi-permanent ET en spray tan).
+  const [selPrestas,setSelPrestas]=useState([]);
+  // Le sélecteur de service/prestation n'est ouvert que pendant un ajout. Une fois la
+  // prestation choisie, il se referme et laisse place au récapitulatif, avec un bouton
+  // « Ajouter une prestation » pour le rouvrir — comme sur Planity ou Booksy.
+  const [picking,setPicking]=useState(true);
+  // selPresta reste une prestation « agrégée » (durées, prix et acomptes additionnés)
+  // pour que le calendrier, le calcul des créneaux et le récapitulatif continuent
+  // de fonctionner sans modification.
+  const selPresta=useMemo(()=>{
+    if(selPrestas.length===0)return null;
+    if(selPrestas.length===1)return selPrestas[0].presta;
+    return {
+      id:"multi",
+      nom:selPrestas.map(e=>e.presta.nom).join(" + "),
+      duree:selPrestas.reduce((s,e)=>s+(e.presta.duree||0),0),
+      prix:selPrestas.reduce((s,e)=>s+(e.presta.prix||0),0),
+      acompte:selPrestas.reduce((s,e)=>s+(e.presta.acompte||0),0),
+      apartir:selPrestas.some(e=>e.presta.apartir),
+    };
+  },[selPrestas]);
+  const prestaKey=(sv,su,p)=>`${sv}|${su}|${p.id}`;
+  // Le laser ne se cumule pas : forfaits étalés dans le temps, tarifs à part.
+  const isLaser=(sv)=>sv==="laser";
+  const panierHasLaser=selPrestas.some(e=>isLaser(e.svcId));
   const [date,setDate]=useState("");const [slot,setSlot]=useState("");const [showAuth,setShowAuth]=useState(false);const [done,setDone]=useState(null);
   const [showSprayModal,setShowSprayModal]=useState(false);
   const svc=svcId?SERVICES.find(s=>s.id===svcId):null;
@@ -720,7 +773,7 @@ function ReservationView({session,allRdvs,clientRdvs,onBooked,laserUnlocked,onAu
   })();
   useEffect(()=>{if(firstAvailable&&!date)setDate(firstAvailable);},[firstAvailable]);
   const takenSlots=(()=>{const blocked=new Set();if(date){const dow=parseD(date).getDay();const isWE=dow===0||dow===6;const allowed=isWE?WEEKEND_RES:SEMAINE_RES;ALL_SLOTS_RES.forEach(s=>{if(!allowed.includes(s))blocked.add(s);});}supaBlocked.forEach(s=>blocked.add(s));allRdvs.filter(r=>r.date===date&&r.statut!=="annulé").forEach(r=>{const idx=ALL_SLOTS_RES.indexOf(r.slot);if(idx===-1)return;let mins=0;for(let i=idx;i<ALL_SLOTS_RES.length&&mins<(r.duree||30);i++){blocked.add(ALL_SLOTS_RES[i]);mins+=30;}});return blocked;})();
-  const r2=useRef(null),r3=useRef(null),r5=useRef(null),doneRef=useRef(null);
+  const r1=useRef(null),r2=useRef(null),r3=useRef(null),r5=useRef(null),doneRef=useRef(null);
   const sc=(ref,d=100)=>setTimeout(()=>ref.current?.scrollIntoView({behavior:"smooth",block:"start"}),d);
   const isLocked=(s)=>s.locked&&!laserUnlocked;
   const [confirming,setConfirming]=useState(false);const [confirmError,setConfirmError]=useState("");
@@ -731,11 +784,17 @@ function ReservationView({session,allRdvs,clientRdvs,onBooked,laserUnlocked,onAu
       if(Array.isArray(liveRdvs)){const ALL=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];const wantedIdx=ALL.indexOf(slot);const wantedSlotsNeeded=Math.ceil((selPresta.duree||30)/30);for(const r of liveRdvs){const rIdx=ALL.indexOf(r.slot);if(rIdx===-1)continue;const rEnd=rIdx+Math.ceil((r.duree||30)/30);const wantedEnd=wantedIdx+wantedSlotsNeeded;if(wantedIdx<rEnd&&wantedEnd>rIdx){setConfirmError("Désolée, ce créneau vient d'être réservé par quelqu'un d'autre. Choisissez-en un autre.");setSlot("");setConfirming(false);return;}}}
       // Préfixe le nom de la prestation par sa sous-catégorie (ex: "Remplissage - Couleur")
       // pour lever l'ambiguïté dans les emails, notifications et l'agenda.
-      const subLbl=svc.subcats.find(su=>su.prestations.some(pp=>pp.id===selPresta.id))?.label;
-      const prestaLabel=subLbl?`${subLbl} - ${selPresta.nom}`:selPresta.nom;
-      const rdv={user_id:sess.user.id,cat_id:svcId,service:svc.label,prestation:prestaLabel,duree:selPresta.duree,prix:selPresta.prix||0,acompte:selPresta.acompte,date,slot,client_prenom:sess.profile.prenom,client_nom:sess.profile.nom,client_tel:sess.profile.tel,client_email:sess.user.email,statut:"confirmé"};
+      // Chaque prestation est nommée "Sous-catégorie - Prestation", et les prestations
+      // multiples sont séparées par " + " : le libellé reste lisible tel quel dans les
+      // emails, l'agenda Google et les notifications, sans rien changer ailleurs.
+      const prestaLabel=selPrestas.map(e=>e.subLabel?`${e.subLabel} - ${e.presta.nom}`:e.presta.nom).join(" + ");
+      // La catégorie et le service retenus sont ceux de la première prestation choisie :
+      // ils servent à la couleur d'affichage et au comptage fidélité.
+      const first=selPrestas[0];
+      const rdv={user_id:sess.user.id,cat_id:first.svcId,service:first.svcLabel,prestation:prestaLabel,duree:selPresta.duree,prix:selPresta.prix||0,acompte:selPresta.acompte,date,slot,client_prenom:sess.profile.prenom,client_nom:sess.profile.nom,client_tel:sess.profile.tel,client_email:sess.user.email,statut:"confirmé"};
       const res=await api.post("rdvs",rdv,sess.token);
-      if(res&&res.code){setConfirmError(res.code==="23505"?"Vous avez déjà un rendez-vous à cet horaire. Choisissez un autre créneau.":"Erreur : "+(res.message||"impossible de créer le rendez-vous."));setConfirming(false);return;}
+      const errPost=supaError(res);
+      if(errPost){setConfirmError(res&&res.code==="23505"?"Vous avez déjà un rendez-vous à cet horaire. Choisissez un autre créneau.":"Erreur : "+errPost);setConfirming(false);return;}
       const saved=Array.isArray(res)?res[0]:res;
       if(!saved||!saved.id){setConfirmError("Erreur : le rendez-vous n'a pas pu être enregistré. Réessayez ou contactez-nous.");setConfirming(false);return;}
       // Notification push retirée : Make l'envoie déjà via le trigger Postgres "make-rdvs".
@@ -745,7 +804,28 @@ function ReservationView({session,allRdvs,clientRdvs,onBooked,laserUnlocked,onAu
     }catch(e){console.log("Erreur réservation:",e);setConfirmError("Erreur réseau. Vérifiez votre connexion et réessayez.");}
     setConfirming(false);
   };
-  const selectPresta=(p)=>{if(selPresta?.id===p.id){setSelPresta(null);setDate("");setSlot("");return;}setSelPresta(p);setDate("");setSlot("");sc(r3);};
+  // Ajoute ou retire une prestation du panier. Toute modification remet à zéro la
+  // date et le créneau, puisque la durée totale du rendez-vous vient de changer.
+  const selectPresta=(p,sub)=>{
+    const key=prestaKey(svcId,sub.id,p);
+    const entry={key,presta:p,svcId,svcLabel:svc?.label||"",subLabel:sub.label,color:svc?.color||C.accent};
+    setDate("");setSlot("");
+    setSelPrestas(prev=>{
+      if(prev.some(e=>e.key===key))return prev.filter(e=>e.key!==key);
+      // Le laser reste seul : on remplace le panier, dans un sens comme dans l'autre.
+      if(isLaser(svcId)||prev.some(e=>isLaser(e.svcId)))return[entry];
+      return[...prev,entry];
+    });
+    setPicking(false);
+    sc(r3);
+  };
+  // Rouvre le sélecteur sur la liste des services, sans toucher aux prestations déjà choisies.
+  const startAdding=()=>{setSvcId(null);setOpenSub(null);setPicking(true);sc(r1);};
+  const cancelAdding=()=>{setPicking(false);sc(r3);};
+  const removeFromPanier=(key)=>{
+    setDate("");setSlot("");
+    setSelPrestas(prev=>{const next=prev.filter(e=>e.key!==key);if(next.length===0){setSvcId(null);setOpenSub(null);setPicking(true);}return next;});
+  };
   if(done) return (
     <div ref={doneRef} className="fu" style={{textAlign:"center",padding:"52px 0"}}>
       <div style={{width:56,height:56,borderRadius:"50%",background:C.accentLight,border:`1.5px solid ${C.accent}`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 24px",color:C.accentDark,fontSize:22}}>✓</div>
@@ -753,22 +833,25 @@ function ReservationView({session,allRdvs,clientRdvs,onBooked,laserUnlocked,onAu
       <div style={{fontSize:14,color:C.textMid,lineHeight:2,marginBottom:8}}>{done.prestation}<br/>{fmtLong(done.date)} à {done.slot}</div>
       <div style={{fontSize:12,color:C.textLight,marginBottom:36,lineHeight:1.7}}>Un SMS de rappel vous sera envoyé 24h avant.</div>
       <AdresseBlock/>
-      <GBtn onClick={()=>{setDone(null);setSvcId(null);setOpenSub(null);setSelPresta(null);setDate("");setSlot("");setShowSprayModal(false);}}>Nouvelle réservation</GBtn>
+      <GBtn onClick={()=>{setDone(null);setSvcId(null);setOpenSub(null);setSelPrestas([]);setDate("");setSlot("");setShowSprayModal(false);}}>Nouvelle réservation</GBtn>
     </div>
   );
   return (
     <div>
       {showSprayModal&&<SprayTanModal onConfirm={()=>{setShowSprayModal(false);sc(r2);}}/>}
       {showAuth&&<AuthModal onAuth={(s)=>{if(onAuth)onAuth(s);handleConfirm(s);}} onClose={()=>setShowAuth(false)} booking={selPresta?{nom:selPresta.nom,date,slot,prix:selPresta.prix||0}:null}/>}
-      <div>
-        <Lbl>Choisissez un service</Lbl>
+      {picking&&(
+      <div ref={r1}>
+        <Lbl>{selPrestas.length>0?"Ajouter une prestation":"Choisissez un service"}</Lbl>
         <div style={{display:"flex",flexDirection:"column",gap:8}}>
           {SERVICES.map(s=>{
             const active=svcId===s.id;const locked=isLocked(s);
             return (
               <div key={s.id} onClick={()=>{
                 const newSvc=SERVICES.find(sv=>sv.id===s.id);
-                if(svcId!==s.id){setSelPresta(null);setDate("");setSlot("");setShowSprayModal(false);if(newSvc?.autoOpen)setOpenSub(newSvc.subcats[0].id);else setOpenSub(null);}
+                // Le panier est conservé quand on change de service : c'est ce qui permet
+                // de combiner par exemple une pose d'ongles et un spray tan.
+                if(svcId!==s.id){setShowSprayModal(false);if(newSvc?.autoOpen)setOpenSub(newSvc.subcats[0].id);else setOpenSub(null);}
                 if(s.id==="spray"&&svcId!==s.id){setSvcId(s.id);setShowSprayModal(true);return;}
                 setSvcId(s.id);sc(r2);
               }} style={{padding:"18px 20px",borderRadius:14,border:`1.5px solid ${active?s.color:C.border}`,background:active?s.color+"0f":C.surface,cursor:"pointer",transition:"all .2s",display:"flex",alignItems:"center",justifyContent:"space-between",boxShadow:active?"0 2px 14px rgba(0,0,0,.05)":"none"}}>
@@ -782,7 +865,8 @@ function ReservationView({session,allRdvs,clientRdvs,onBooked,laserUnlocked,onAu
           })}
         </div>
       </div>
-      {svc&&(
+      )}
+      {picking&&svc&&(
         <div ref={r2} className="fu" style={{marginTop:36}}>
           <Lbl>Prestation</Lbl>
           {isLocked(svc)&&<div style={{marginBottom:14,padding:"12px 16px",background:C.locked+"44",border:`1px solid ${C.locked}`,borderRadius:12,fontSize:13,color:C.lockedText,lineHeight:1.6}}>🔒 Les séances sont accessibles après consultation. Réservez d'abord votre consultation.</div>}
@@ -799,11 +883,11 @@ function ReservationView({session,allRdvs,clientRdvs,onBooked,laserUnlocked,onAu
                     <div>
                       {sub.note&&<div style={{padding:"10px 18px",background:C.warn,borderBottom:`1px solid ${C.warnBorder}`,fontSize:12,color:C.warnText,lineHeight:1.6}}>{sub.note}</div>}
                       {sub.prestations.map((p,i)=>{
-                        const active=selPresta?.id===p.id;
+                        const active=selPrestas.some(e=>e.key===prestaKey(svcId,sub.id,p));
                         return (
-                          <div key={p.id} onClick={()=>!p.devis&&selectPresta(p)} style={{padding:"14px 18px",borderTop:i>0?`1px solid ${C.borderLight}`:"none",display:"flex",justifyContent:"space-between",alignItems:"center",background:active?C.accentLight:"transparent",cursor:p.devis?"default":"pointer",transition:"background .15s"}}>
-                            <div>
-                              <div style={{fontSize:14,fontWeight:active?600:400,color:active?C.accentDark:C.text}}>{p.nom}</div>
+                          <div key={p.id} onClick={()=>!p.devis&&selectPresta(p,sub)} style={{padding:"14px 18px",borderTop:i>0?`1px solid ${C.borderLight}`:"none",display:"flex",justifyContent:"space-between",alignItems:"center",background:active?C.accentLight:"transparent",cursor:p.devis?"default":"pointer",transition:"background .15s"}}>
+                            <div style={{minWidth:0}}>
+                              <div style={{fontSize:14,fontWeight:active?600:400,color:active?C.accentDark:C.text,display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>{p.nom}{active&&<span style={{fontSize:10,fontWeight:600,background:C.accent,color:"#fff",padding:"2px 7px",borderRadius:9,letterSpacing:.3}}>✓ Ajoutée</span>}</div>
                               <div style={{fontSize:12,color:"#a090c0",marginTop:2}}>{p.duree} min</div>
                               {p.apartir&&<div style={{fontSize:11,color:C.lockedText,marginTop:3,lineHeight:1.4,maxWidth:210}}>Devis selon le motif choisi — tarif confirmé ensemble avant le RDV</div>}
                             </div>
@@ -821,19 +905,59 @@ function ReservationView({session,allRdvs,clientRdvs,onBooked,laserUnlocked,onAu
           </div>
         </div>
       )}
-      {selPresta&&(
+      {picking&&selPrestas.length>0&&(
+        <div className="fu" style={{marginTop:20}}>
+          <GBtn onClick={cancelAdding}>Annuler l'ajout</GBtn>
+        </div>
+      )}
+      {!picking&&selPrestas.length>0&&(
+        <div className="fu" style={{marginTop:28,background:C.surface,border:`1.5px solid ${C.accent}`,borderRadius:16,padding:"16px 18px"}}>
+          <div style={{fontSize:10,letterSpacing:1.5,textTransform:"uppercase",color:C.textLight,marginBottom:12}}>Votre rendez-vous</div>
+          {selPrestas.map(e=>(
+            <div key={e.key} style={{display:"flex",alignItems:"center",gap:10,marginBottom:9}}>
+              <div style={{width:3,alignSelf:"stretch",minHeight:26,borderRadius:2,background:e.color,flexShrink:0}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:600,color:C.text}}>{e.presta.nom}</div>
+                <div style={{fontSize:11,color:C.textLight,marginTop:1}}>{e.subLabel} · {e.presta.duree} min · {e.presta.prix>0?`${e.presta.prix} €`:"Offert"}</div>
+              </div>
+              <button onClick={()=>removeFromPanier(e.key)} style={{background:"none",border:`1px solid ${C.border}`,borderRadius:7,color:C.textLight,fontSize:13,lineHeight:1,padding:"5px 9px",cursor:"pointer",flexShrink:0}}>✕</button>
+            </div>
+          ))}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12,paddingTop:11,borderTop:`1px solid ${C.borderLight}`}}>
+            <span style={{fontSize:12,color:C.textMid}}>{fmtDuree(selPresta.duree)} au total</span>
+            <span style={{fontSize:16,fontWeight:700,color:C.accentDark}}>{selPresta.prix>0?`${selPresta.prix} €`:"Offert"}</span>
+          </div>
+          {panierHasLaser
+            ? <div style={{fontSize:11,color:C.lockedText,marginTop:12,lineHeight:1.6,padding:"10px 12px",background:C.locked+"44",border:`1px solid ${C.locked}`,borderRadius:10}}>🔒 Les prestations laser se réservent seules, sans autre soin sur le même créneau.</div>
+            : <button onClick={startAdding} style={{width:"100%",marginTop:13,padding:"12px",borderRadius:10,border:`1.5px dashed ${C.accent}`,background:"transparent",color:C.accentDark,fontSize:13,fontWeight:600,cursor:"pointer",letterSpacing:.2}}>+ Ajouter une prestation</button>}
+        </div>
+      )}
+      {!picking&&selPresta&&(
         <div ref={r3} className="fu" style={{marginTop:36}}>
           <Lbl>Date &amp; horaire</Lbl>
           <PlanityDatePicker selPresta={selPresta} allRdvs={allRdvs} allSupaBlocked={allSupaBlocked} selectedDate={date} selectedSlot={slot} onSelect={(d,s)=>{setDate(d);if(s){setSlot(s);sc(r5);}else setSlot("");}}/>
         </div>
       )}
-      {slot&&(
+      {!picking&&slot&&(
         <div ref={r5} className="fu" style={{marginTop:36}}>
           <Lbl>Récapitulatif</Lbl>
           <div style={{background:C.surface,border:`1.5px solid ${C.border}`,borderRadius:16,padding:"20px",marginBottom:12,boxShadow:"0 2px 10px rgba(0,0,0,.03)"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",paddingBottom:14,borderBottom:`1px solid ${C.borderLight}`,marginBottom:14}}>
-              <div><div style={{fontSize:16,fontWeight:600,color:C.text,marginBottom:4}}>{selPresta.nom}</div><div style={{fontSize:13,color:C.textMid}}>{svc?.label} · {selPresta.duree} min</div></div>
-              <div style={{fontSize:18,fontWeight:700,color:C.accentDark}}>{selPresta.prix>0?`${selPresta.prix} €`:"Offert"}</div>
+            <div style={{paddingBottom:14,borderBottom:`1px solid ${C.borderLight}`,marginBottom:14}}>
+              {selPrestas.map((e,i)=>(
+                <div key={e.key} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,paddingTop:i>0?10:0,marginTop:i>0?10:0,borderTop:i>0?`1px solid ${C.borderLight}`:"none"}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:15,fontWeight:600,color:C.text,marginBottom:3}}>{e.presta.nom}</div>
+                    <div style={{fontSize:12,color:C.textMid}}>{e.subLabel} · {e.presta.duree} min</div>
+                  </div>
+                  <div style={{fontSize:15,fontWeight:600,color:C.textMid,flexShrink:0}}>{e.presta.prix>0?`${e.presta.prix} €`:"Offert"}</div>
+                </div>
+              ))}
+              {selPrestas.length>1&&(
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:14,paddingTop:12,borderTop:`1.5px solid ${C.border}`}}>
+                  <div><div style={{fontSize:14,fontWeight:700,color:C.text}}>Total</div><div style={{fontSize:12,color:C.textLight,marginTop:2}}>Durée cumulée : {fmtDuree(selPresta.duree)}</div></div>
+                  <div style={{fontSize:19,fontWeight:700,color:C.accentDark}}>{selPresta.prix>0?`${selPresta.prix} €`:"Offert"}</div>
+                </div>
+              )}
             </div>
             {[["Date",fmtLong(date)],["Heure",slot]].map(([k,v])=>(<div key={k} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"5px 0"}}><span style={{color:C.textLight}}>{k}</span><span style={{color:C.textMid,fontWeight:500}}>{v}</span></div>))}
           </div>
@@ -1218,7 +1342,7 @@ function RdvRow({
             </div>
             <div style={{marginBottom:8}}>
               <div style={{fontSize:11,color:C.textLight,marginBottom:4}}>Prix (€)</div>
-              <input value={editPrix} onChange={e=>setEditPrix(e.target.value)} type="number" style={{width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,color:C.text,fontSize:13}}/>
+              <input value={editPrix} onChange={e=>setEditPrix(e.target.value)} type="number" step="0.01" inputMode="decimal" style={{width:"100%",padding:"8px 10px",background:C.surface,border:`1px solid ${C.border}`,borderRadius:7,color:C.text,fontSize:13}}/>
             </div>
             <div style={{marginBottom:8}}>
               <div style={{fontSize:11,color:C.textLight,marginBottom:4}}>Date</div>
@@ -1316,8 +1440,9 @@ function AdminView({onExit}) {
     setEditSaving(true);
     const body={};
     if(editPresta.trim()&&editPresta.trim()!==r.prestation) body.prestation=editPresta.trim();
-    const p=parseFloat(editPrix);
-    if(!isNaN(p)&&p!==r.prix) body.prix=p;
+    // La virgule est acceptée au clavier français : "87,50" vaut "87.50".
+    const p=parseFloat(String(editPrix).replace(",","."));
+    if(!isNaN(p)&&p!==Number(r.prix)) body.prix=p;
     if(editDate&&editDate!==r.date) body.date=editDate;
     if(editSlot&&editSlot!==r.slot) body.slot=editSlot;
     if(body.date||body.slot) body.gcal_event_id=null;
@@ -1325,8 +1450,13 @@ function AdminView({onExit}) {
       const session=await getValidAdminSession();
       if(!session){alert("Session admin expirée. Reconnecte-toi puis réessaie.");setIsUnlocked(false);setEditSaving(false);return;}
       const patchRes=await api.patch("rdvs",`id=eq.${r.id}`,body,session.access_token);
-      if(patchRes&&patchRes.error){alert("Erreur lors de la modification : "+(patchRes.error.message||patchRes.error));setEditSaving(false);return;}
-      setRdvs(prev=>prev.map(x=>x.id===r.id?{...x,...body}:x));
+      // On vérifie réellement que la base a accepté l'écriture avant de mettre l'écran
+      // à jour. Sans ça, un montant refusé s'affichait quand même, puis réapparaissait
+      // à l'ancienne valeur au rechargement de la page.
+      const errPatch=supaError(patchRes);
+      if(errPatch){alert("La modification n'a pas été enregistrée.\n\n"+errPatch);setEditSaving(false);return;}
+      const savedRow=Array.isArray(patchRes)?patchRes[0]:patchRes;
+      setRdvs(prev=>prev.map(x=>x.id===r.id?{...x,...body,...(savedRow||{})}:x));
       if(body.date||body.slot){
         const rdvUpdated={...r,...body};
         // Notification push retirée : les webhooks Make ci-dessous déclenchent déjà
@@ -1538,6 +1668,10 @@ export default function App() {
             <a href="https://ig.me/m/neylika31" target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,textDecoration:"none",background:C.accentLight,border:`1px solid ${C.accent}`,borderRadius:20,padding:"5px 12px"}}>
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.477 2 2 6.477 2 12c0 1.89.525 3.66 1.438 5.168L2 22l4.832-1.438A9.96 9.96 0 0 0 12 22c5.523 0 10-4.477 10-10S17.523 2 12 2z" stroke="#c9a0c0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="8.5" cy="12" r="1" fill="#c9a0c0"/><circle cx="12" cy="12" r="1" fill="#c9a0c0"/><circle cx="15.5" cy="12" r="1" fill="#c9a0c0"/></svg>
               <span style={{fontSize:12,color:C.accent}}>Me contacter</span>
+            </a>
+            <a href="sms:+33680894349" style={{display:"inline-flex",alignItems:"center",gap:6,textDecoration:"none",background:C.accentLight,border:`1px solid ${C.accent}`,borderRadius:20,padding:"5px 12px"}}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" stroke="#c9a0c0" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <span style={{fontSize:12,color:C.accent}}>06 80 89 43 49</span>
             </a>
           </div>
         </div>
