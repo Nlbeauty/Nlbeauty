@@ -346,6 +346,27 @@ function fmtDuree(min) {
   return `${h}h${String(m).padStart(2, "0")}`;
 }
 
+// ─── SESSION CLIENTE : JETON TOUJOURS FRAIS AVANT ÉCRITURE ────────────────────
+// Le jeton d'accès Supabase expire au bout d'une heure. Jusqu'ici il n'était
+// rafraîchi qu'au chargement de la page : une page restée ouverte plus longtemps
+// (le temps de choisir ses prestations, de comparer des dates, ou simplement un
+// onglet laissé de côté) se retrouvait avec un jeton périmé, et l'enregistrement
+// échouait avec « JWT expired ». On le rafraîchit donc juste avant chaque écriture.
+async function ensureFreshSession(sess) {
+  if (!sess) return sess;
+  const MARGE = 120000; // renouvelé 2 minutes avant l'expiration réelle
+  const expireLe = sess.expires_at ? sess.expires_at * 1000 : 0;
+  if (expireLe && expireLe - Date.now() > MARGE) return sess;
+  if (!sess.refresh_token) return sess;
+  try {
+    const res = await api.refreshToken(sess.refresh_token);
+    if (!res || !res.access_token) return sess;
+    const maj = { ...sess, token: res.access_token, refresh_token: res.refresh_token || sess.refresh_token, expires_at: res.expires_at };
+    localStorage.setItem("nlb_sess", JSON.stringify(maj));
+    return maj;
+  } catch { return sess; }
+}
+
 function todayStr() { return new Date().toISOString().split("T")[0]; }
 function parseD(s) { const [y,m,d]=s.split("-"); return new Date(+y,+m-1,+d); }
 function fmtLong(s) { const d=parseD(s); return `${DAYS_L[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
@@ -780,6 +801,9 @@ function ReservationView({session,allRdvs,clientRdvs,onBooked,laserUnlocked,onAu
   const handleConfirm=async(sess)=>{
     setShowAuth(false);if(!selPresta||!date||!slot)return;if(confirming)return;setConfirming(true);setConfirmError("");
     try{
+      // Le jeton peut avoir expiré pendant que la cliente composait son rendez-vous.
+      sess=await ensureFreshSession(sess);
+      if(onAuth)onAuth(sess);
       const liveRdvs=await api.get("rdvs",`date=eq.${date}&statut=neq.annulé&select=slot,duree`);
       if(Array.isArray(liveRdvs)){const ALL=["09:00","09:30","10:00","10:30","11:00","11:30","12:00","12:30","13:00","13:30","14:00","14:30","15:00","15:30","16:00","16:30","17:00","17:30","18:00","18:30","19:00","19:30","20:00"];const wantedIdx=ALL.indexOf(slot);const wantedSlotsNeeded=Math.ceil((selPresta.duree||30)/30);for(const r of liveRdvs){const rIdx=ALL.indexOf(r.slot);if(rIdx===-1)continue;const rEnd=rIdx+Math.ceil((r.duree||30)/30);const wantedEnd=wantedIdx+wantedSlotsNeeded;if(wantedIdx<rEnd&&wantedEnd>rIdx){setConfirmError("Désolée, ce créneau vient d'être réservé par quelqu'un d'autre. Choisissez-en un autre.");setSlot("");setConfirming(false);return;}}}
       // Préfixe le nom de la prestation par sa sous-catégorie (ex: "Remplissage - Couleur")
@@ -794,7 +818,12 @@ function ReservationView({session,allRdvs,clientRdvs,onBooked,laserUnlocked,onAu
       const rdv={user_id:sess.user.id,cat_id:first.svcId,service:first.svcLabel,prestation:prestaLabel,duree:selPresta.duree,prix:selPresta.prix||0,acompte:selPresta.acompte,date,slot,client_prenom:sess.profile.prenom,client_nom:sess.profile.nom,client_tel:sess.profile.tel,client_email:sess.user.email,statut:"confirmé"};
       const res=await api.post("rdvs",rdv,sess.token);
       const errPost=supaError(res);
-      if(errPost){setConfirmError(res&&res.code==="23505"?"Vous avez déjà un rendez-vous à cet horaire. Choisissez un autre créneau.":"Erreur : "+errPost);setConfirming(false);return;}
+      if(errPost){
+        // Si le renouvellement n'a pas suffi, on invite à se reconnecter plutôt que
+        // d'afficher le message technique « JWT expired », incompréhensible pour une cliente.
+        if(/JWT|expired|token/i.test(errPost)){setConfirmError("Votre session a expiré. Reconnectez-vous, votre sélection est conservée.");setShowAuth(true);setConfirming(false);return;}
+        setConfirmError(res&&res.code==="23505"?"Vous avez déjà un rendez-vous à cet horaire. Choisissez un autre créneau.":"Erreur : "+errPost);setConfirming(false);return;
+      }
       const saved=Array.isArray(res)?res[0]:res;
       if(!saved||!saved.id){setConfirmError("Erreur : le rendez-vous n'a pas pu être enregistré. Réessayez ou contactez-nous.");setConfirming(false);return;}
       // Notification push retirée : Make l'envoie déjà via le trigger Postgres "make-rdvs".
@@ -1027,7 +1056,7 @@ function ModifyPicker({rdv, newDate, setNewDate, newSlot, setNewSlot, modifyDone
   );
 }
 
-function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}) {
+function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs,onSessionRefresh}) {
   const up=rdvs.filter(r=>r.date>=todayStr()&&r.statut!=="annulé").sort((a,b)=>a.date.localeCompare(b.date));
   const past=rdvs.filter(r=>r.date<todayStr()||r.statut==="annulé").sort((a,b)=>b.date.localeCompare(a.date));
   const svcColor=(catId)=>SERVICES.find(s=>s.id===catId)?.color||C.accent;
@@ -1083,7 +1112,9 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
     if(modifying)return;
     setModifying(true);setModifyError("");
     try{
-      const token=session?.token;if(!token){setModifyError("Session expirée.");setModifying(false);return;}
+      // Même précaution qu'à la réservation : le jeton peut avoir expiré entre-temps.
+      const freshMod=await ensureFreshSession(session);if(freshMod!==session&&onSessionRefresh)onSessionRefresh(freshMod);
+      const token=freshMod?.token;if(!token){setModifyError("Votre session a expiré. Reconnectez-vous et réessayez.");setModifying(false);return;}
       const liveRdvs=await api.get("rdvs",`date=eq.${newDate}&statut=neq.annulé&select=id,slot,duree`);
       if(Array.isArray(liveRdvs)){
         const wantedIdx=ALL_SLOTS.indexOf(newSlot);const slotsNeeded=Math.ceil((modifyingRdv.duree||30)/30);
@@ -1117,7 +1148,8 @@ function MesRdvsView({rdvs,loading,session,onRdvCancelled,onRdvModified,allRdvs}
   const handleCancel=async(r)=>{
     if(!confirm("Annuler ce rendez-vous ?"))return;if(cancelling)return;setCancelling(true);setCancelError("");
     try{
-      const token=session?.token;if(!token){setCancelError("Session expirée. Veuillez vous reconnecter.");setCancelling(false);return;}
+      const freshCan=await ensureFreshSession(session);if(freshCan!==session&&onSessionRefresh)onSessionRefresh(freshCan);
+      const token=freshCan?.token;if(!token){setCancelError("Votre session a expiré. Reconnectez-vous et réessayez.");setCancelling(false);return;}
       const patchRes=await api.patch("rdvs",`id=eq.${r.id}`,{statut:"annulé"},token);const updated=Array.isArray(patchRes)?patchRes[0]:patchRes;
       if(!updated||updated.error||(updated.statut&&updated.statut!=="annulé")){setCancelError("Impossible d'annuler ce rendez-vous. Contactez-nous.");setCancelling(false);return;}
       // Notification push retirée : Make l'envoie déjà via le trigger Postgres "trg_rdv_annule".
@@ -1634,6 +1666,9 @@ export default function App() {
     },50*60*1000);return()=>clearInterval(interval);
   },[]);
   const handleBooked=(rdv)=>{setAllRdvs(p=>[...p,rdv]);setClientRdvs(p=>[...p,rdv]);setTab("mesrdvs");showToast("Rendez-vous confirmé !");};
+  // Appelé quand un jeton a été renouvelé au moment d'une écriture, pour que le reste
+  // de l'application travaille avec la session à jour.
+  const handleSessionRefresh=(s)=>{if(!s)return;setSession(s);localStorage.setItem("nlb_sess",JSON.stringify(s));};
   const handleLogout=async()=>{if(session?.token)await api.signOut(session.token);localStorage.removeItem("nlb_sess");setSession(null);setClientRdvs([]);showToast("Déconnecté·e");};
   const handleRdvModified=(rdvId,changes)=>{
     setClientRdvs(p=>p.map(r=>r.id===rdvId?{...r,...changes}:r));
@@ -1679,7 +1714,7 @@ export default function App() {
         {tab==="mesrdvs"&&(
           <div className="fu">
             <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:26,color:C.text,marginBottom:24}}>Mes rendez-vous</div>
-            {!session?<div style={{textAlign:"center",padding:"48px 0",color:C.textLight}}><div style={{fontSize:14,marginBottom:20}}>Connectez-vous pour voir vos rendez-vous.</div><PBtn onClick={()=>setTab("reserver")} style={{maxWidth:220,margin:"0 auto"}}>Réserver</PBtn></div>:<MesRdvsView rdvs={clientRdvs} loading={loadingRdvs} session={session} onRdvCancelled={handleRdvCancelled} onRdvModified={handleRdvModified} allRdvs={allRdvs}/>}
+            {!session?<div style={{textAlign:"center",padding:"48px 0",color:C.textLight}}><div style={{fontSize:14,marginBottom:20}}>Connectez-vous pour voir vos rendez-vous.</div><PBtn onClick={()=>setTab("reserver")} style={{maxWidth:220,margin:"0 auto"}}>Réserver</PBtn></div>:<MesRdvsView rdvs={clientRdvs} loading={loadingRdvs} session={session} onRdvCancelled={handleRdvCancelled} onRdvModified={handleRdvModified} allRdvs={allRdvs} onSessionRefresh={handleSessionRefresh}/>}
           </div>
         )}
         {tab==="compte"&&(
